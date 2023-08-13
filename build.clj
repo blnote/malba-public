@@ -19,6 +19,8 @@
                :target-dir class-dir})
   (b/copy-file {:src "malba-algo.edn" :target "target/malba-algo.edn"})
   (b/copy-file {:src "database.edn" :target "target/database.edn"})
+  (b/copy-file {:src "README.md" :target "target/README.md"})
+  
   (b/compile-clj {:basis basis
                   :src-dirs ["src"]
                   :class-dir class-dir})
