@@ -15,9 +15,9 @@
             [malba.utils :as u]))
 
 ;;GLOBALS
-(def version "0.8.2.1")
-(def db-conf-file "./database-local.edn")
-(def exit-on-close false)
+(def version "0.5.0")
+(def db-conf-file "./database.edn")
+(def exit-on-close true)
 
 (def db-conf (atom nil))
 (def worker (atom nil))
