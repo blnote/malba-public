@@ -1,0 +1,43 @@
+;; configuration file for MALBA algorithm
+;; this file is read before every algorithm initialization
+;;
+;; spaces/tabs are not important
+;; numbers must not use comma
+
+{
+ ;default values for user interface startup
+ :dc-out 8
+ :dc-in 0.9
+ :bc 0.9
+ :max-subgraph-size 2000
+
+ ;parameter to avoid candidate explosion
+ :max-parents-of-shared-refs 1000
+
+ ;boundaries for parameter search
+ :min-p {:dc-out 5
+         :dc-in 0.2
+         :bc 0.3}
+ 
+ :max-p {:dc-out 12
+         :dc-in 0.99
+         :bc 0.99}
+
+ ;step sizes for parameter search
+ :step {:dc-out 1
+        :dc-in 0.05
+        :bc 0.05}
+
+ ;used in calculation of dcin as filter:
+ ;only papers citing subgraph at least 'mincited' times are considered 
+ :min-cited 3
+
+ ;;used in calculation of bc, only papers with more than 'minrefs'
+ ;;references are considered
+ :min-refs 8
+
+ ;;values substracted from thresholds for construction of surrounding 
+ :surrounding {:dc-out 3
+               :dc-in 0.15
+               :bc 0.2}
+ }

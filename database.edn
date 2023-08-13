@@ -1,0 +1,24 @@
+{:url "host[:port]/database" ;host/database
+ :user ""
+ :password ""
+ :sql-timeout-in-seconds 300
+ :max-query-size 100000
+
+ ;; SQL statements 
+ ;; 'IDLIST' is substituted in program by list of ids
+ ;; selected columns can not be changed without changing program code, 
+ ;; but WHERE clauses can be modified.
+
+ :cites-sql "SELECT item_id_cited, item_id_citing FROM wos_b_202207.v_refs WHERE item_id_citing IN IDLIST AND starts_with(item_id_cited,'WOS:')"
+
+ :cited-by-sql "SELECT item_id_cited, item_id_citing FROM wos_b_202207.v_refs WHERE item_id_cited IN IDLIST"
+
+ :details-sql "SELECT item_id, item_title, pubyear, source_title from wos_b_202207.v_items WHERE item_id IN IDLIST"
+
+ :authors-sql "SELECT item.item_id, string_agg(family_name, ',' order by author_seq_nr) AS auts FROM wos_b_202207.v_items ITEM JOIN wos_b_202207.v_items_authors aut ON aut.item_id = item.item_id WHERE item.item_id IN IDLIST GROUP BY item.item_id"
+
+ :details-from-refs-sql "SELECT DISTINCT item_id_cited,ref_item_title,ref_source_title,ref_authors,ref_pubyear FROM wos_b_202207.v_refs WHERE item_id_cited IN IDLIST"
+
+ ;citation info is queried sequentially from db using 
+ ;prepared sql statements of fixed sizes for speed:
+ :batch-sizes [1 10 50 100 500 1000 5000]}
