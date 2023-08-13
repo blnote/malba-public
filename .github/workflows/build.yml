@@ -1,6 +1,6 @@
 name: build-jar
 run-name: ${{ github.actor }} is learning GitHub Actions
-on: []
+on: [workflow_dispatch]
 jobs:
   clojure:
     runs-on: ubuntu-latest
