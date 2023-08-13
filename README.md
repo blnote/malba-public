@@ -16,5 +16,5 @@ You need
  - Gephi Toolkit version 0.10.0, can be downloaded from [here](https://github.com/gephi/gephi-toolkit/releases/download/v0.10.0/gephi-toolkit-0.10.0-all.jar)
 
  1. save the downloaded Gephi Toolkit jar in the root directory of the source code
- 2. within the root directory execute `clj -T:build uber`
- 3. the `target` subdirectory should contain a jar file that can be run using `java -jar malba-X.jar` where X is the current version. 
+ 2. within the root directory execute `clojure -T:build uber`
+ 3. the `target` subdirectory should contain a jar file that can be run from within this directory using `java -jar malba-X.jar` where X is the current version. 
