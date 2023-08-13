@@ -1,5 +1,5 @@
 name: build-jar
-run-name: ${{ github.actor }} is learning GitHub Actions
+run-name: ${{ github.actor }} is building uber jar
 on: [workflow_dispatch]
 jobs:
   clojure:
@@ -19,7 +19,7 @@ jobs:
         -   name: Download gephi toolkit
             run: curl -O https://github.com/gephi/gephi-toolkit/releases/download/v0.10.0/gephi-toolkit-0.10.0-all.jar
         -   name: "Execute build"
-            run: clj -T:build uber
+            run: clojure -T:build uber
         -   name: "upload build"
             uses: actions/upload-artifact@v3
             with:
