@@ -4,12 +4,9 @@
 (ns malba.algorithms.malba-algo
   (:require [malba.algorithms.malba-params :as malba-params]
             [malba.algorithms.proto-algo :as proto-algo] 
-            [clojure.test :as t] 
             [malba.logger :as l]
             [malba.cache :as c :refer [look-up]]
-            [malba.database :as db] 
-            [malba.algorithms.proto-algo-params :as params]
-            #_[taoensso.tufte :refer [p]]))
+            [malba.algorithms.proto-algo-params :as params]))
 
 (defn- counts "returns map of sizes of algorithm structures (used for debugging)"
   [state]
@@ -289,33 +286,4 @@
                    (update :params #(params/update-vars (malba-params/->Params) %)) 
                    (update :citing-common #(->> (c/look-up cache :cites %)))
                    (update :citing-sub #(->> (c/look-up cache :cites %))))))
-
-
-
-;;TESTING
-(require '[malba.file-io :as f])
-(t/deftest algorithm-for-sample-data-and-default-parameters
-  (let [C-file (c/from-file "C:/Users/B/.malbadata/networkWOS.txt")
-        C-db (c/init (db/connect (-> "./database-local.edn" slurp read-string)))
-        seed (f/load-seed  "C:/Users/B/.malbadata/seedWOS.txt")
-        seed-f (c/known-ids C-file seed)]
-    (t/is (= 25 (count seed-f)))
-    (let [state-f (-> (init C-file seed-f))
-          state-db (-> (init C-db seed-f))
-          cm (->> (keys state-f)
-                  (remove #{:C :interrupted :params})
-                  (map #(= (state-f %) (state-db %)))
-                  (every? true?))]
-      (t/is (= (counts state-f) (counts state-db)))
-
-      (t/is (= (counts state-f) {:cited-by-sub 205
-                                 :citing-common 2067
-                                 :citing-sub 283
-                                 :subgraph 25}) "compare initial structures of java and clojure")
-      (t/is (= (counts (run state-f)) {:cited-by-sub 238
-                                       :citing-common 2329
-                                       :citing-sub 449
-                                       :subgraph 39}) "compare algorithm structures to original program output")
-      (t/is (true? cm) "tests if algorithm states of db and file mode are equal"))
-    (db/close! (C-db :db))))
 

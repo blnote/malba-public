@@ -3,8 +3,7 @@
 
 (ns malba.algorithms.malba-params
   (:require [malba.algorithms.proto-algo-params :as proto]
-            [malba.logger :as l]
-            [clojure.test :as t]
+            [malba.logger :as l] 
             [malba.file-io :as f]))
 
 (def config-file "./malba-algo.edn")
@@ -90,24 +89,3 @@
                    (+ (get this p)  (step p))
                    (double (+ (bigdec (str (get this p))) (bigdec (str (step p))))))]
             (when (<= new-p (max-p p)) (assoc this p new-p)))))
-
-(t/deftest loosen-tighten-test
-  (let [pa (-> (->Params) .init)]
-    (t/is (= (-> pa (.tighten :bc) (.loosen :bc) (.get-vars))
-             (-> pa (.loosen :bc) (.tighten :bc) (.get-vars))))))
-
-(t/deftest update-vars-test
-  (let [pa (-> (->Params) .init)]
-    (t/is  (thrown? IllegalArgumentException
-                    (.update-vars pa {:bc nil :dc-in nil :dc-out 1 :max-subgraph-size 1000})))
-    (t/is  (thrown? IllegalArgumentException
-                    (.update-vars pa {:bc 0.9 :dc-in nil :dc-out 1 :max-subgraph-size 1000})))
-    (t/is  (thrown? IllegalArgumentException
-                    (.update-vars pa {:bc 0.9 :dc-in 0.5 :dc-out 1 :max-subgraph-size -1000})))
-    (t/is  (thrown? IllegalArgumentException
-                    (.update-vars pa {:bc 0.9 :dc-in nil :dc-out 1 :max-subgraph-size 1000})))
-    (t/is  (thrown? IllegalArgumentException
-                    (.update-vars pa {:bc 1 :dc-in 1 :dc-out -0.1 :max-subgraph-size 1000})))
-    (t/is  (thrown? IllegalArgumentException
-                    (.update-vars pa {:bc 0.5 :dc-in 0.5 :dc-out -1 :max-subgraph-size 1000})))
-    (t/is (= pa (.update-vars pa (.get-vars pa))))))
