@@ -17,7 +17,7 @@ jobs:
             with:
               cli: 'latest'              # Clojure CLI based on tools.deps
         -   name: Download gephi toolkit
-            run: curl -O https://github.com/gephi/gephi-toolkit/releases/download/v0.10.0/gephi-toolkit-0.10.0-all.jar
+            run: wget https://github.com/gephi/gephi-toolkit/releases/download/v0.10.0/gephi-toolkit-0.10.0-all.jar
         -   name: "Execute build"
             run: clojure -T:build uber
         -   name: "upload build"
