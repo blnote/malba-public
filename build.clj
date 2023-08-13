@@ -1,6 +1,8 @@
 (ns build
   (:require [clojure.tools.build.api :as b]))
 
+;build command: clojure -T:build jar
+
 (def lib 'tu-berlin/malba)
 (def version "0.5")
 (def class-dir "target/classes")
@@ -24,10 +26,6 @@
            :uber-file uber-file
            :basis basis
            :main 'malba.core 
-           #_#_:exclude ["(?i)^(META-INF/)?(LICENSE)(\\.(txt|md))?$"]
            :conflict-handlers {"(?i)^(META-INF/)?(COPYRIGHT|NOTICE|LICENSE)(\\.(txt|md))?$" :append-dedupe}})
   (b/delete {:path "target/classes"})
   (b/zip {:src-dirs ["target"] :zip-file (format "%s-%s.zip" (name lib) version)}))
-
-(comment
-  "build command: clojure -T:build jar")

@@ -6,8 +6,13 @@ This is a java program implementing the MALBA algorithm for bibliometric network
 The source code in this repository is licensed under the MIT License (see LICENSE.md file). It is written in [Clojure](https://www.clojure.org) using the [Gephi-Toolkit](https://github.com/gephi/gephi/wiki/Toolkit) for graph visualization. However, the Gephi-Toolkit itself and its third-party components are under different licenses, see [here](https://gephi.org/developers/license/). By downloading and using the provided binary you are agreeing to these respective licenses.
 
 ## Run
-- 
+- make sure Java Runtime Engine is installed (Java 11 or later)
+- unzip release to a directory of your choice
+- within this directory run `java -jar malba-X.jar`, where X is the release version
+- the program comes with two configuration files: `malba-algo.edn` to configure the algorithm parameters and `database.edn` for database settings
 
+## Usage
+ToDo
 ## Compiling from source code
 You need
  - Java JDK 11 (or later)
@@ -17,4 +22,5 @@ You need
 
  1. save the downloaded Gephi Toolkit jar in the root directory of the source code
  2. within the root directory execute `clojure -T:build uber`
- 3. the `target` subdirectory should contain a jar file that can be run from within this directory using `java -jar malba-X.jar` where X is the current version. 
+ 3. the root directory should contain a zip file malba-Version.zip containing a jar file and configuration files.
+ 4. proceed as described in Section Run above.
