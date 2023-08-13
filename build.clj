@@ -27,7 +27,7 @@
            #_#_:exclude ["(?i)^(META-INF/)?(LICENSE)(\\.(txt|md))?$"]
            :conflict-handlers {"(?i)^(META-INF/)?(COPYRIGHT|NOTICE|LICENSE)(\\.(txt|md))?$" :append-dedupe}})
   (b/delete {:path "target/classes"})
-  (b/zip {:src-dirs ["target"] :zip-file (format "%s-%s.zip" (name lib) version)}))
+  #_(b/zip {:src-dirs ["target"] :zip-file (format "%s-%s.zip" (name lib) version)}))
 
 (comment
   "build command: clj -T:build jar")
