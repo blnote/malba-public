@@ -1,3 +1,11 @@
+All source files in this repository are licensed under the MIT License (see below). 
+Note that the compiled software makes use of various libraries for which different licenses apply. Explicitely it is using the 
+- [Gephi-Toolkit](https://github.com/gephi/gephi/wiki/Toolkit) for graph visualization  [license information](https://gephi.org/developers/license/)
+- [Closure](https://www.clojure.org) as programming language [license information](https://clojure.org/community/license)
+- [FlatLaf](https://github.com/JFormDesigner/FlatLaf) for look and feel [Apache License 2.0](https://github.com/JFormDesigner/FlatLaf/blob/main/LICENSE)
+ By downloading and using the provided binary you are agreeing to these respective licenses.
+
+-------------
 MIT License
 
 Copyright (c) 2023 blnote
