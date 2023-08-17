@@ -8,6 +8,7 @@ The source code in this repository is licensed under the MIT License. It is writ
 ## Run
 - make sure Java Runtime Engine is installed (Java 11 or later)
 - unzip release to a directory of your choice
+- download Gephi Toolkit version 0.10.0 from [here](https://github.com/gephi/gephi-toolkit/releases/download/v0.10.0/gephi-toolkit-0.10.0-all.jar) and place in directory
 - within this directory run `java -jar malba-X.jar`, where X is the release version
 - the program comes with two configuration files: `malba-algo.edn` to configure the algorithm parameters and `database.edn` for database settings
 
