@@ -238,41 +238,7 @@
 
 
 (comment
-  (-main)
-  (import (java.io File))
-
-  (defn test-functions [seed-filename export-dir]
-    ;initialization
-    (event-dispatch "load-seed" (File. seed-filename))
-    (event-dispatch "db-connect")
-    ;algo
-    (event-dispatch "algo-search" {})
-    (Thread/sleep 10000)
-    (event-dispatch "algo-stop" {})
-    (event-dispatch "algo-run" {})
-    (event-dispatch "algo-reset")
-    
-    ;layout
-    (event-dispatch "view-surrounding" {})
-    (event-dispatch "layout" "yifan")
-    (event-dispatch "layout" "frucht")
-    (event-dispatch "layout" "overlap")
-    
-    ;hovering and focusing
-    (event-dispatch "hovered" {:event [162.7938 5.4403839111328125]
-                               :time (System/currentTimeMillis)})
-    (event-dispatch "view-neighbors" [162.7938 5.4403839111328125])
-    (event-dispatch "view-reset" {})
-    
-    ;exporting
-    (event-dispatch "export" [(File. (string/join [export-dir "/malba.pdf"])) "pdf"])
-    (event-dispatch "export" [(File. (string/join [export-dir "/malba.csv"])) "csv"])
-    (event-dispatch "export" [(File. (string/join [export-dir "/malba.gexf"])) "gexf"])
-    
-    (event-dispatch "save-session" (File. (string/join [export-dir "/test.session"])))
-    (event-dispatch "load-session" (File. (string/join [export-dir "/test.session"]))))
-  (test-functions "C:/Users/B/.malbadata/seedWOS.txt" "C:/Users/B/.malbadata")
-  
-  )
+  ;Start program with 
+  (-main))
 
 
