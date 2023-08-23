@@ -66,9 +66,9 @@
   (update-vars [this {:keys [bc dc-in dc-out max-subgraph-size max-parents-of-shared-refs] :as ps}]
     (when (and dc-out (< dc-out 0))
       (throw (IllegalArgumentException. "Parameter DCout must be positive!")))
-    (when (and bc (< bc 0) (> bc 1))
+    (when (and bc (or (< bc 0) (> bc 1)))
       (throw (IllegalArgumentException. "Parameter BC must be between 0 and 1!")))
-    (when (and dc-in (< dc-in 0) (> dc-in 1))
+    (when (and dc-in (or (< dc-in 0) (> dc-in 1)))
       (throw (IllegalArgumentException. "Parameter DCin must be between 0 and 1!")))
     (when (and (contains? ps :max-subgraph-size) (or (nil? max-subgraph-size) (<= max-subgraph-size 0)))
       (throw (IllegalArgumentException. "Parameter max. graph size must be number greater than 0!")))
