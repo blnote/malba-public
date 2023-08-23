@@ -71,8 +71,8 @@
                     "\nAdded in Step:\t" (str step)]))))
 
 (defn filter-edges
-  "returns end-points to edges with at least one subgraph node.
-   only returns edges among surounding for nodes that would be isolated."
+  "returns end-points to edges with at least one subgraph node
+   only returns edges among surrounding for nodes that would be isolated"
   [id subgraph surrounding cites all]
   (let [in-sur (contains? surrounding id)
         all-end-pts (filter all (cites id))
@@ -85,7 +85,7 @@
                        (or in-sur (contains? surrounding e))})))))
 
 (defn assemble-graph-info
-  "assemble graph information (nodes, edges, details) to be sent do gephi"
+  "assemble graph information (nodes, edges, details) to be sent to Gephi"
   [cache subgraph surrounding] 
   (let [subgraph-ids (into #{} (keys subgraph))
         surrounding-ids (into #{} (keys surrounding))
