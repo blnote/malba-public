@@ -5,7 +5,7 @@
   (:require [clojure.string :as string]
             [malba.gui :as gui]))
 
-(def DEBUG true)
+(def DEBUG false)
 
 (defn debug "tab when DEBUG is true" [msg]
   (when DEBUG (tap> msg)))
