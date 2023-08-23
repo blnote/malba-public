@@ -8,13 +8,6 @@
             [malba.cache :as c :refer [look-up]]
             [malba.algorithms.proto-algo-params :as params]))
 
-(defn- counts "returns map of sizes of algorithm structures (used for debugging)"
-  [state]
-  (let [ks [:subgraph :cited-by-sub :citing-common :citing-sub]]
-    (->> ks
-         (map (fn [k] {k (count (get state k))}))
-         (into {}))))
-
 (defn- terminated? [state]
   (and (= (get state :added) 0) (not (get state :error))))
 
@@ -124,10 +117,12 @@
              (add-nodes state)))))
 
 (defn init
-  "init algorithm with cache C and a set of seed ids and default parameters."
+  "init algorithm with cache C and a set of seed ids and (default) parameters."
   ([C seed]
+   (init C seed (.init (malba-params/->Params))))
+  ([C seed params]
    (let [state {:C C
-                :params (.init (malba-params/->Params))
+                :params params
                 :valid-seeds seed ;seeds found in database/file
                 :cited-by-sub {} ;map id -> number of times cited for all papers cited by subgraph
                 :citing-sub {} ;map id -> citations for all DCin candidates
