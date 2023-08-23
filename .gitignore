@@ -1,3 +1,6 @@
+#dont upload test data to github
+/test/data
+
 # visual code
 /*.vsix
 # .vscode/settings.json
