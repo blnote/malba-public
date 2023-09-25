@@ -1,10 +1,10 @@
 # MALBA
 ## Overview
-This is an implementation of the MALBA algorithm for bibliometric networks. MALBA stands for Multilayer Adjustable Local Bibliometric Algorithm. It constructs cohesive communities in networks of publications by iteratively growing a subgraph from a seed. For more information see [Paper](https://dapp.orvium.io/deposits/64ad562c170ba03b15d89b4e/view).
+This is an implementation of the MALBA algorithm for bibliometric networks. MALBA stands for Multilayer Adjustable Local Bibliometric Algorithm. It constructs cohesive communities in networks of publications by iteratively growing a subgraph from a seed. For more information see our [Paper](https://dapp.orvium.io/deposits/64ad562c170ba03b15d89b4e/view).
 
 ## Run
 - make sure Java Runtime Engine is installed (Java 11 or later)
-- unzip release to a directory of your choice
+- download and unzip [release](https://github.com/blnote/malba-public/releases) to a directory of your choice
 - download Gephi Toolkit version 0.10.0 from [here](https://github.com/gephi/gephi-toolkit/releases/download/v0.10.0/gephi-toolkit-0.10.0-all.jar) and place in directory
 - within this directory run `java -jar malba-X.jar`, where X is the release version
 - the program comes with two configuration files: `malba-algo.edn`  and `database.edn` to configure the algorithm parameters and database settings
