@@ -22,8 +22,8 @@
 
 ;;GLOBALS
 (def version "0.5.0")
-(def db-conf-file "./test/data/database-local.edn")
-(def exit-on-close false)
+(def db-conf-file "./database.edn")
+(def exit-on-close true)
 
 (def db-conf (atom nil))
 (def worker (atom nil))
