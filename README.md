@@ -2,6 +2,8 @@
 ## Overview
 This is an implementation of the MALBA algorithm for bibliometric networks. MALBA stands for Multilayer Adjustable Local Bibliometric Algorithm. It constructs cohesive communities in networks of publications by iteratively growing a subgraph from a seed. For more information see our [Paper](https://dapp.orvium.io/deposits/64ad562c170ba03b15d89b4e/view).
 
+![Sample Screenshot](/doc/screenshot.png "Screenshot")
+
 ## Run
 - make sure Java Runtime Engine is installed (Java 11 or later)
 - download and unzip [release](https://github.com/blnote/malba-public/releases) to a directory of your choice
@@ -16,10 +18,11 @@ The source code in this repository is licensed under the MIT License. It is writ
 You need
  - Java JDK 11 (or later)
  - Clojure [installation instructions](https://clojure.org/guides/install_clojure)
- - source code (click on Releases)
+ - MALBA source code ([releases](https://github.com/blnote/malba-public/releases))
  - Gephi Toolkit version 0.10.0, can be downloaded from [here](https://github.com/gephi/gephi-toolkit/releases/download/v0.10.0/gephi-toolkit-0.10.0-all.jar)
-
- 1. save the downloaded Gephi Toolkit jar in the root directory of the source code
- 2. within the root directory execute `clojure -T:build uber`
- 3. the root directory should contain a zip file malba-Version.zip containing a jar file and configuration files.
- 4. proceed as described in Section Run above.
+ 
+ 1. unzip MALBA source code
+ 2. save the downloaded Gephi Toolkit jar in the root directory of the source code
+ 3. within the root directory execute `clojure -T:build uber`
+ 4. the root directory should contain a zip file malba-Version.zip containing a jar file and configuration files.
+ 5. proceed as described in Section Run above.
