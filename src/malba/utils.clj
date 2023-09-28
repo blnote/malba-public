@@ -23,7 +23,7 @@
 
 (defn save-session!
   "save session to file"
-  [state file]
+  [state ^java.io.File file]
   (with-open [outp (java.io.ObjectOutputStream.
                     (java.io.FileOutputStream. file))]
     ;write state without algo and cache
@@ -37,7 +37,7 @@
 
 (defn load-session
   "load session from file"
-  [file]
+  [^java.io.File file]
   (with-open [inp (java.io.ObjectInputStream. (java.io.FileInputStream. file))]
     (tap> (.readObject inp)) ;version 
     (let [state (.readObject inp)

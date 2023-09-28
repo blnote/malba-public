@@ -2,6 +2,7 @@
 ;; This file is part of MALBA.
 
 (ns malba.algorithms.malba-algo
+  "implementation of MALBA algorithm"
   (:require [malba.algorithms.malba-params :as malba-params]
             [malba.algorithms.proto-algo :as proto-algo] 
             [malba.logger :as l]
@@ -119,7 +120,7 @@
 (defn init
   "init algorithm with cache C and a set of seed ids and (default) parameters."
   ([C seed]
-   (init C seed (.init (malba-params/->Params))))
+   (init C seed (params/init (malba-params/->Params))))
   ([C seed params]
    (let [state {:C C
                 :params params
@@ -178,7 +179,7 @@
           (if (contains? tried p) (recur tried (rest to-try))
               (let [s (run-loop (assoc state :params p))
                     size (count (get s :subgraph))]
-                (l/text (format "%s  subgraph: %s" (.to-string p)
+                (l/text (format "%s  subgraph: %s" (params/to-string p)
                                 (if (terminated? s) (str size) "-"))) 
                 (cond
                   (interrupted? s) tried
@@ -273,9 +274,9 @@
                                            (update :citing-common keys)
                                            (update :citing-sub keys)
                                            (update :params #(into {} %))))]
-               (.writeObject out serialized)))
+               (.writeObject  ^java.io.ObjectOutputStream out serialized)))
   (from-stream [this in cache]
-               (-> (merge this (.readObject in) {:C cache
+               (-> (merge this (.readObject ^java.io.ObjectInputStream in) {:C cache
                                                  :interrupted (atom false)
                                                  :error false})
                    (update :params #(params/update-vars (malba-params/->Params) %)) 

@@ -2,6 +2,9 @@
 ;; This file is part of MALBA.
 
 (ns malba.gui
+  "graphical user interface
+   initialization via init sets an atom UI containing the GUI interface functions
+   which are accessed by malba.core via (invoke ...)"
   (:require [clojure.string :as string]
             [malba.preview]))
 
@@ -9,7 +12,7 @@
         (java.io File)
         (java.awt Color Dimension)
         (java.awt Insets BorderLayout GridLayout GridBagLayout GridBagConstraints)
-        (java.awt.event KeyEvent InputEvent WindowAdapter ActionListener FocusAdapter ComponentAdapter)
+        (java.awt.event KeyEvent InputEvent WindowAdapter ActionListener FocusAdapter FocusEvent ComponentAdapter)
 
         (javax.swing JCheckBox JButton JFileChooser ButtonGroup JPanel JLabel JRadioButton JTextField JPasswordField JTextField JScrollPane JFrame JToggleButton JTextArea JMenuItem JTabbedPane JProgressBar JMenu JMenuBar UIManager BorderFactory BoxLayout SwingConstants) 
         (javax.swing SwingUtilities KeyStroke)
@@ -42,7 +45,7 @@
     #_(throw (IllegalArgumentException. (format "Unknown UI function: %s !" fname)))))
 
 (defn attach-preview [target evt-dispatch]
-  (let [canvas (@UI :canvas)
+  (let [canvas ^JPanel (@UI :canvas)
         {:keys [preview
                 refresh-fn reset-fn show-details-fn]} (malba.preview/init-preview target evt-dispatch)]
     (SwingUtilities/invokeAndWait
@@ -52,7 +55,7 @@
          (.addComponentListener (proxy [ComponentAdapter] []
                                   (componentShown [_] (refresh-fn))
                                   (componentResized [_] (refresh-fn))))
-         (.add preview BorderLayout/CENTER))))
+         (.add ^JPanel preview BorderLayout/CENTER))))
     (swap! UI assoc :refresh refresh-fn)
     (swap! UI assoc :reset reset-fn)
     (swap! UI assoc :show-details show-details-fn)))
@@ -116,7 +119,7 @@
 (defn- action-btn-reset-view [evt-dispatch]
   (evt-dispatch "view-reset"))
 (defn- action-btn-surrounding [evt-dispatch btn]
-  (evt-dispatch "view-surrounding" (.isSelected btn)))
+  (evt-dispatch "view-surrounding" (.isSelected ^JToggleButton btn)))
 (defn- action-btn-layout-frucht [evt-dispatch]
   (evt-dispatch "layout" "frucht"))
 (defn- action-btn-layout-yifan [evt-dispatch]
@@ -124,7 +127,7 @@
 (defn- action-btn-layout-overlap [evt-dispatch]
   (evt-dispatch "layout" "overlap"))
 
-(defn- log-text [progressBar areaLog msg]
+(defn- log-text [^JProgressBar progressBar ^JTextArea areaLog msg]
   (when (some? msg)
     (.setBackground progressBar (Color. 209 209 209))
 
@@ -133,7 +136,7 @@
       (.replaceSelection (string/join ["\n" msg]))
       (.setCaretPosition (.. areaLog (getDocument) (getLength))))))
 
-(defn- log-error [progressBar areaLog msg]
+(defn- log-error [^JProgressBar progressBar ^JTextArea areaLog msg]
   (.setBackground progressBar (Color/RED))
   (doto areaLog
     (.setCaretPosition (.. areaLog (getDocument) (getLength)))
@@ -227,11 +230,12 @@
                                    (f evt-dispatch param)))))
         ;select everything when focusing in text boxes:
         focus-listener (proxy [FocusAdapter] []
-                         (focusGained [evt]
-                           (.. evt (getComponent) (selectAll))))
+                         (focusGained [^FocusEvent evt]
+                           (let [tf ^JTextField (.getComponent evt)]
+                             (.selectAll tf))))
         set-db-mode (fn [^Boolean bool]
                       (->> [btnCache btnConnect txtDBadr txtUser txtPwd lblUrl lblUser lblPassword]
-                           (map #(.setEnabled % bool))
+                           (map #(.setEnabled ^java.awt.Component % bool))
                            (doall))
                       (.setEnabled btnFileNetwork (not bool))
                       (.setSelected radioFile (not bool))
@@ -616,12 +620,12 @@
     ;;reset UI atom with a set of functions to update UI
     (let [enable-algo-btns (fn [^Boolean bool]
                              (->> (.getComponents panelAlgoButtons)
-                                  (map #(.setEnabled % bool))
+                                  (map #(.setEnabled ^java.awt.Component % bool))
                                   (dorun))
                              (.setEnabled btnStop (not bool)))
           enable-result-btns (fn [^Boolean bool]
                                (->> (.getComponents panelGraphButtons)
-                                    (map #(.setEnabled % bool))
+                                    (map #(.setEnabled ^java.awt.Component % bool))
                                     (dorun))) 
 
           set-initialized (fn [^Boolean bool]

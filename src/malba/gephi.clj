@@ -1,19 +1,21 @@
 (ns malba.gephi
+  "interface to gephi functions for graph visualization, layout, nearest node finding, exporting."
   (:require [clojure.string :as string])
   (:import [java.awt Color]
            [org.gephi.preview.types EdgeColor]))
 
 (import  (org.openide.util Lookup)
          (org.gephi.project.api ProjectController)
-         (org.gephi.graph.api GraphController)
+         (org.gephi.graph.api GraphController GraphModel)
          (org.gephi.preview.api  PreviewController PreviewProperty RenderTarget)
          (org.gephi.filters.api FilterController)
          (org.gephi.filters.plugin.attribute AttributeEqualBuilder$EqualBooleanFilter$Node)
          (org.gephi.filters.plugin.graph EgoBuilder$EgoFilter)
          (org.gephi.filters.plugin.operator INTERSECTIONBuilder$IntersectionOperator)
-         (org.gephi.io.importer.api Container$Factory ImportController )
+         (org.gephi.io.importer.api ContainerLoader Container$Factory ImportController)
          (org.gephi.io.processor.plugin DefaultProcessor)
-         (org.gephi.io.exporter.api ExportController) 
+         (org.gephi.io.exporter.api ExportController)
+         (org.gephi.layout.plugin AbstractLayout)
          (org.gephi.layout.plugin.forceAtlas ForceAtlasLayout)
          (org.gephi.layout.plugin.fruchterman FruchtermanReingold)
          (org.gephi.layout.plugin.noverlap NoverlapLayout)
@@ -31,22 +33,28 @@
 ;from mouse pointer when focusing
 (def max-dist 18)
 
-(defn- get-class
-  "class loader from netbeans used by gephi"
-  [c]
-  (.. (Lookup/getDefault) (lookup c)))
 
-(defn- get-graph-model []
-  (.getGraphModel (get-class GraphController)
-                  (.getCurrentWorkspace (get-class ProjectController))))
+(defn- get-class [cl]
+  (.lookup (Lookup/getDefault) ^Class cl))
+
+#_(defmacro get-class
+  "class loader from netbeans used by gephi"
+  [c] 
+  `(let [res# (get-class-helper ~c)]
+     ~(vary-meta res# assoc :tag ProjectController)
+     ))
+
+(defn- get-graph-model ^GraphModel []
+  (.getGraphModel ^GraphController (get-class GraphController)
+                  (.getCurrentWorkspace ^ProjectController (get-class ProjectController))))
 (defn init
   "inits gephi project, graph model and returns rendering target"
-  []
-  (let [projectController (doto (get-class ProjectController)
+  ^RenderTarget []
+  (let [projectController (doto ^ProjectController (get-class ProjectController)
                             (.newProject))
         workspace (.getCurrentWorkspace projectController)
-        graphModel (.getGraphModel (get-class GraphController) workspace)
-        pc (get-class PreviewController)
+        graphModel (.getGraphModel ^GraphController (get-class GraphController) workspace)
+        pc ^PreviewController (get-class PreviewController)
         props  (-> pc (.getModel) (.getProperties))
         target (.getRenderTarget pc RenderTarget/G2D_TARGET)]
 
@@ -70,12 +78,12 @@
       (.putValue PreviewProperty/EDGE_COLOR (EdgeColor. Color/GRAY))
       (.putValue PreviewProperty/DIRECTED true)
       (.putValue PreviewProperty/NODE_LABEL_FONT
-                   (-> (.getFontValue props PreviewProperty/NODE_LABEL_FONT)
-                       (.deriveFont (int 5) (float 14)))))
+                 (-> (.getFontValue props PreviewProperty/NODE_LABEL_FONT)
+                     (.deriveFont (int 5) (float 14)))))
     (.render pc target)
     target))
 
-(defn- create-node [container id detail]
+(defn- create-node ^org.gephi.io.importer.api.NodeDraft [^ContainerLoader container id detail]
   (let [nodeDraft (.. container (factory) (newNodeDraft id))]
     (when detail
       (doseq [k (keys detail)]
@@ -84,14 +92,15 @@
         (.setLabel nodeDraft id)))
     nodeDraft))
 
-(defn layout-graph [algo]
+(defn layout-graph [algo-name]
   (let [steps 100
-        algo (condp = algo
-               "overlap" (NoverlapLayout. nil)
-               "frucht" (FruchtermanReingold. nil)
-               "force" (ForceAtlasLayout. nil)
-               "yifan" (YifanHuLayout. nil (StepDisplacement. 0.5))
-               (throw (IllegalArgumentException. (format "Layout %s not supported!" algo))))]
+        ^AbstractLayout algo
+        (condp = algo-name
+          "overlap" (NoverlapLayout. nil)
+          "frucht" (FruchtermanReingold. nil)
+          "force" (ForceAtlasLayout. nil)
+          "yifan" (YifanHuLayout. nil (StepDisplacement. 0.5))
+          (throw (IllegalArgumentException. (format "Layout %s not supported!" algo-name))))]
     (doto algo
       (.setGraphModel (get-graph-model))
       (.resetPropertiesValues)
@@ -101,14 +110,14 @@
         (do (.goAlgo algo)
             (recur (inc i)))
         (.endAlgo algo))))
-  (.refreshPreview (get-class PreviewController)))
+  (.refreshPreview ^PreviewController (get-class PreviewController)))
 
 (defn- render-preview
   "sets up the gephi preview dependent on settings set through 
    view-surrounding and view-neighbours"
   []
-  (let [pc (get-class PreviewController)
-        fc (get-class FilterController)
+  (let [pc ^PreviewController (get-class PreviewController)
+        fc ^FilterController (get-class FilterController)
         gm (get-graph-model)
         intersectionQ (.createQuery fc (INTERSECTIONBuilder$IntersectionOperator.))]
 
@@ -118,22 +127,20 @@
           (.setPattern node-id)
           (.setDepth (int 1)))
         (.setSubQuery fc intersectionQ (.createQuery fc ego-filter))))
-    
+
     (when-not (@preview-state :surrounding) ;filter out surrounding nodes
       (when-let [cl (.. gm (getNodeTable) (getColumn "surrounding"))]
         (let [sf (AttributeEqualBuilder$EqualBooleanFilter$Node. cl)]
           (.setMatch sf false)
           (.setSubQuery fc intersectionQ (.createQuery fc sf)))))
-    
+
     (.setVisibleView gm (.filter fc intersectionQ)) ;apply filters
-    
-    (reduce (fn [_ n]
+
+    (reduce (fn [_ ^org.gephi.graph.api.Node n]
               (let [sur (.getAttribute n "surrounding")]
-                (when (= false sur) 
-                  (.setColor n (Color/RED)))
-                )) nil (-> gm (.getGraph) (.getNodes)))
-    
-    
+                (when (= false sur)
+                  (.setColor n (Color/RED))))) nil (-> gm (.getGraph) (.getNodes)))
+
     (.. pc (getModel) (getProperties) (putValue PreviewProperty/NODE_OPACITY 60))
     (.refreshPreview pc)))
 
@@ -156,9 +163,9 @@
 (defn- dist "eucledian distance" [[a b] [c d]]
   (Math/sqrt (+ (Math/pow (- c a) 2) (Math/pow (- d b) 2))))
 
-(defn- find-nearest-neighbor [coords]
+(defn- find-nearest-neighbor ^org.gephi.graph.api.Node [coords]
   (when (and coords (number? (first coords)) (number? (last coords)))
-    (first  (reduce (fn [[nmin d] n]
+    (first  (reduce (fn [[nmin d]  ^org.gephi.graph.api.Node n]
                       (let [nd (dist coords [(.x n) (.y n)])]
                         (if (< nd d) [n nd] [nmin d])))
                     [nil max-dist] (-> (get-graph-model) (.getGraphVisible) (.getNodes))))))
@@ -175,19 +182,19 @@
 (defn- defocus-node []
   (when-let [node-id (@preview-state :focused)]
     (try
-      (when-let [node (.. (get-graph-model) (getDirectedGraph) (getNode node-id))]
+      (when-let [^org.gephi.graph.api.Node node (.. (get-graph-model) (getDirectedGraph) (getNode node-id))]
         (.setColor node (-> (.getColor node) (.brighter) (.brighter)))
         (.setSize node  (/ (.size node) 2.0))
         (when-not (@preview-state :ego) ;if not in neighbor view, focus also neighbors 
-          (reduce (fn [r n]
+          (reduce (fn [r ^org.gephi.graph.api.Node n]
                     (.setSize n (/ (.size n) 2.0))
                     r)
                   nil (.. (get-graph-model) (getDirectedGraph) (getNeighbors node))))
         node)
-      (catch IllegalArgumentException _) 
+      (catch IllegalArgumentException _)
       (finally (swap! preview-state assoc :focused nil)))))
 
-(defn- focus-node [coords]
+(defn- focus-node ^org.gephi.graph.api.Node [coords]
   (defocus-node)
   (when-not (= coords :end)
     (when-let [node (find-nearest-neighbor coords)]
@@ -196,20 +203,19 @@
         (.setColor node (doto (.getColor node) (.darker) (.darker)))
         (.setSize node  (* 2.0 (.size node)))
         (when-not (@preview-state :ego) ;if not in neighbor view, focus also neighbors 
-          (reduce (fn [r n]
+          (reduce (fn [r ^org.gephi.graph.api.Node n]
                     (.setSize n (* 2.0 (.size n)))
-                    r) 
-                  nil (.. (get-graph-model) (getDirectedGraph) (getNeighbors node))
-                  ))
+                    r)
+                  nil (.. (get-graph-model) (getDirectedGraph) (getNeighbors node))))
         node
         (catch IllegalArgumentException _)))))
 
 
-(defn- get-node-detail [node]
+(defn- get-node-detail [^org.gephi.graph.api.Node node]
   (when node
     (->> (.getAttributeKeys node)
-         (map (fn [s] {(keyword s) (.getAttribute node s)}))
-         (apply merge)) ))
+         (map (fn [s] {(keyword s) (.getAttribute node ^String s)}))
+         (apply merge))))
 
 (defn hovered
   "called when hovered over preview with model coordinates or, 
@@ -217,27 +223,27 @@
    returns node detail of hovered-over node"
   [coords]
   (let [node (focus-node coords)]
-    (.refreshPreview (get-class PreviewController))
+    (.refreshPreview ^PreviewController (get-class PreviewController))
     (get-node-detail node)))
 
 (defn update-graph
   "adds missing nodes/edges from subgraph and surrounding and corresponding edges"
   [ids]
-  (let [ic (get-class ImportController)
-        ws (.getCurrentWorkspace (get-class ProjectController))
+  (let [ic ^ImportController (get-class ImportController)
+        ws (.getCurrentWorkspace ^ProjectController (get-class ProjectController))
         graph (.getDirectedGraph (get-graph-model))
-        c (.newContainer (get-class Container$Factory))
-        container (.getLoader c)] 
+        c (.newContainer ^Container$Factory (get-class Container$Factory))
+        container (.getLoader c)]
     (doseq [id (keys ids)]
       (if-let [n (.getNode graph id)]
         (do ;if node already in graph, only update surrounding and step attributes 
           (when (not= (.getAttribute n "surrounding")
                       (get-in ids [id :surrounding]))
-            (.setAttribute n "step" (Integer. (get-in ids [id :step])))) 
+            (.setAttribute n "step" (Integer. ^int (get-in ids [id :step]))))
           (.setAttribute n "surrounding" (get-in ids [id :surrounding])))
         (let [nodeDraft (create-node container id (get-in ids [id :details]))]
           (.setValue nodeDraft "surrounding" (get-in ids [id :surrounding]))
-          (.setValue nodeDraft "step" (Integer. (get-in ids [id :step])))
+          (.setValue nodeDraft "step" (Integer. (int (get-in ids [id :step]))))
           (.addNode container nodeDraft))))
     ;add edges 
     (doseq [id (keys ids)
@@ -251,30 +257,30 @@
             (.setTarget (.getNode container end))
             (.setWeight (if (edge :surrounding) 0.5 1.5)))
           (.addEdge container edgeDraft))))
-    (.process ic c (DefaultProcessor.) ws) 
+    (.process ic c (DefaultProcessor.) ws)
     (render-preview)))
 
 (defn export
   "exports file to csv pdf or gexf"
-  [[file mode]]
+  [[^java.io.File file mode]]
   (if (= mode "csv")
     (let [ks [:id :title :pubyear :authors :source_title :step :surrounding]
           sep "\t"
-          header (map name ks) 
-          node-details 
+          header (map name ks)
+          node-details
           (->> (reduce (fn [out n] ;have to use reduce because of gephi thread locking ... 
                          (conj out (get-node-detail n))) ()
                        (-> (get-graph-model) (.getGraphVisible) (.getNodes)))
                (sort-by :step)
-               (map #(map (fn [k] (% k)) ks)))] 
+               (map #(map (fn [k] (% k)) ks)))]
       (->> (cons header node-details)
            (map #(interpose sep %))
            (interpose "\n")
            flatten
            string/join
            (spit file)))
-    (let [ec (get-class ExportController)
-          ws (.getCurrentWorkspace (get-class ProjectController))
+    (let [ec ^ExportController (get-class ExportController)
+          ws (.getCurrentWorkspace ^ProjectController (get-class ProjectController))
           exporter (.getExporter ec mode)]
       (.setWorkspace exporter ws)
       (.exportFile ec file exporter))))

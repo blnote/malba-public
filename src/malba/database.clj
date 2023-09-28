@@ -2,6 +2,7 @@
 ;; This file is part of MALBA.
 
 (ns malba.database
+  "interface function to postgres publication database called from cache if entries are missing."
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [next.jdbc :as jdbc]
@@ -53,7 +54,7 @@
 
 (defn close! "close db connection if existent" [conf]
   (when conf
-    (if-let [conn (conf :conn)]
+    (if-let [^java.sql.Connection conn (conf :conn)]
       (do (.close conn)
           (dissoc conf :conn))
       conf)))
@@ -118,7 +119,7 @@
   "try to obtain publication details from ref table for ids not found in items table"
   [db details]
   (let [missing (->> details (filter #(empty? (val %))) (map key))
-        aut-tf (fn [ref_auts]
+        aut-tf (fn [^java.sql.Array ref_auts]
                  (when-let [s (first (.getArray ref_auts))]
                    {:authors (string/replace s #"[\{\"'\} ]" "")}))]
     (if (empty? missing) details
@@ -175,7 +176,7 @@
 
                   m (->> (jdbc/execute! stmt nil {:builder-fn jdbc-rs/as-unqualified-maps})
                          (filter #(and (% :item_id_cited) (% :item_id_citing)))
-                         (reduce (fn [res {:keys [item_id_cited item_id_citing]}]
+                         (reduce (fn [res {:keys [^String item_id_cited ^String item_id_citing]}]
                                    (let [entry (if (= mode :cites)
                                                  {(.intern item_id_citing) #{(.intern item_id_cited)}}
                                                  {(.intern item_id_cited) #{(.intern item_id_citing)}})]
@@ -184,8 +185,8 @@
               (recur (drop batch-sz ids) (merge-with set/union C m))))))))
 
 
-(defn to-stream! [out conf]
+(defn to-stream! [^java.io.ObjectOutputStream out conf]
   (.writeObject out (-> conf (dissoc :conn) (dissoc :prepared-cites) (dissoc :prepared-cited-by))))
 
-(defn from-stream [in]
+(defn from-stream [^java.io.ObjectInputStream in]
   (.readObject in))

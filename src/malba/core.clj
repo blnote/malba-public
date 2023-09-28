@@ -2,6 +2,10 @@
 ;; This file is part of MALBA.
 
 (ns malba.core
+  "main namespace. initializes GUI. load database configuration file.
+   events from GUI are dispatched through event-dispatch which 
+   sets up worker agent that sequentially consumes events (event-consume) that have  dispatched 
+   by the UI (event-dispatch)."
   (:gen-class)
   (:require [clojure.string :as string]
             [malba.cache :as c]
@@ -11,13 +15,15 @@
             [malba.gui :as gui]
             [malba.logger :as l]
             [malba.algorithms.malba-params :as malba-params]
+            [malba.algorithms.proto-algo-params :as algo-params]
             [malba.algorithms.proto-algo :as a]
             [malba.utils :as u]))
 
+
 ;;GLOBALS
 (def version "0.5.0")
-(def db-conf-file "./database.edn")
-(def exit-on-close true)
+(def db-conf-file "./test/data/database-local.edn")
+(def exit-on-close false)
 
 (def db-conf (atom nil))
 (def worker (atom nil))
@@ -101,9 +107,9 @@
   (doto (condp = event
           "save-session" (doto state (u/save-session! params))
           "load-session" (let [state (u/load-session params)]
-                           (l/text (format ">>> Loaded session from %s." (.getName params)))
+                           (l/text (format ">>> Loaded session from %s." (.getName ^java.io.File params)))
                            (doto state (show-results! true) update-ui!))
-          "load-seed" (let [seed-file (.getName params)
+          "load-seed" (let [seed-file (.getName ^java.io.File params)
                             seed (f/load-seed params)]
                         (when (empty? seed)
                           (throw (Error. (format "No seeds found in %s." seed-file))))
@@ -112,7 +118,7 @@
                             (assoc :seed seed)
                             (assoc :seed-file seed-file)
                             (doto update-ui!)))
-          "load-network" (let [network-file (.getName params)
+          "load-network" (let [network-file (.getName ^java.io.File params)
                                C (c/from-file params)]
                            (l/text (format ">>> Loaded network from %s." network-file))
                            (-> state (assoc :cache C) (doto update-ui!)))
@@ -177,7 +183,7 @@
                               (if (nil? params)
                                 (l/text "No valid parameters found.")
                                 (do
-                                  (l/text (format "Max: %s subgraph: %s" (.to-string params) size))
+                                  (l/text (format "Max: %s subgraph: %s" (algo-params/to-string params) size))
                                   (l/text "Parameters updated, run algorithm to view subgraph.")
                                   (doto (update state :algo a/set-params params)
                                     (update-ui!)))))
@@ -225,7 +231,7 @@
   ;init gephi and preview area with rendering target
   (gui/attach-preview (gephi/init) event-dispatch)
   ;set default algorithm parameters
-  (gui/invoke :set-params (-> (malba-params/->Params) (.init) (.get-vars)))
+  (gui/invoke :set-params (-> (malba-params/->Params) (algo-params/init) (algo-params/get-vars)))
   ;load db configuration
   (if-let [conf (f/load-config db-conf-file)]
     (do (reset! db-conf conf)

@@ -2,6 +2,11 @@
 ;; This file is part of MALBA.
 
 (ns malba.cache
+  "implements two kinds of in-memory-caches: 
+   in file-mode the cache consists of two maps cites and cited-by whose keys are publication ids
+   and whose values are sets of ids
+   in database-mode a HashMap of SoftReferences is used. Keys are publication ids as well.
+   Values are SoftReferences of sets of ids."
   (:require [malba.database :as db]
             [malba.file-io :as f]
             [malba.logger :as l]))
@@ -25,7 +30,7 @@
   (let [soft (soft? C)]
     (->> (map (fn [mode]
                 (when-let [ca (C mode)]
-                  {mode (if soft (.size ca) (count ca))})) [:cites :cited-by :details])
+                  {mode (if soft (.size ^HashMap ca) (count ca))})) [:cites :cited-by :details])
          (into {}))))
 
 (defn- log
@@ -47,7 +52,7 @@
 
 (defn from-file
   "initialize cache from text file"
-  [file]
+  [^java.io.File file]
   (let [{:keys [cites cited-by]} (f/load-network file)]
     (doto {:cites cites
            :cited-by cited-by
@@ -58,43 +63,43 @@
 (defn- get-soft
   "returns entry when in soft cache, otherwise nil.
    deletes entry if soft-reference has been cleared"
-  [ca id]
+  [^HashMap ca id]
   (when-let [ref (.get ca id)]
-    (if-let [el (.get ref)]
+    (if-let [el (.get ^SoftReference ref)]
       el
       (do (.remove ca id) nil))))
 
 (defn- put-soft
   "write key and value to cache"
-  [ca k v]
+  [^HashMap ca k v]
   (.put ca k (SoftReference. v)))
 
 (defn- details-to-stream! 
-  [out ca]
+  [^java.io.ObjectOutputStream out ^HashMap ca]
 (.writeInt out (.size ca))
-(doseq [entry ca]
+(doseq [^java.util.HashMap$Node entry ca]
   (let [id (.getKey entry)
-        v (.get (.getValue entry))]
+        v (.get ^SoftReference (.getValue entry))]
     (if (nil? v) (.writeObject out nil) 
         (do
           (.writeObject out id)
           (.writeObject out v))))))
 
 (defn- details-from-stream
-  [in]
+  [^java.io.ObjectInputStream in]
   (let [n (.readInt in)
         hMap (HashMap.)]
-    (doseq [_ (range n)] (when-let [id (.readObject in)]
+    (doseq [_ (range n)] (when-let [^String id (.readObject in)]
                            (put-soft hMap (.intern id) (.readObject in))))
     hMap))
 
 
 (defn- soft-cache-to-stream!
-  [out ca]
+  [^java.io.ObjectOutputStream out ^HashMap ca]
   (.writeInt out (.size ca))
-  (doseq [entry ca]
+  (doseq [^java.util.HashMap$Node entry ca]
     (let [id (.getKey entry)
-          v (.get (.getValue entry))]
+          v (.get ^SoftReference (.getValue entry))]
       (if (nil? v) (.writeObject out nil)
           (do 
             (.writeObject out id)
@@ -102,27 +107,27 @@
             (doseq [s v] (.writeObject out s)))))))
 
 (defn- soft-cache-from-stream
-  [in]
+  [^java.io.ObjectInputStream in]
   (let [n (.readInt in)
         hMap (HashMap.)]
-    (doseq [_ (range n)] (when-let [id (.readObject in)]
+    (doseq [_ (range n)] (when-let [^String id (.readObject in)]
                                (.put hMap (.intern id) 
                                      (SoftReference. 
-                                      (->> (repeatedly (.readInt in) #(.intern (.readObject in)))
+                                      (->> (repeatedly (.readInt in) #(.intern ^String (.readObject in)))
                                            (into #{}))))))
     hMap))
 
 (defn- cache-to-stream!
-  [out ca]
+  [^java.io.ObjectOutputStream out ca]
   (.writeInt out (count ca))
   (doseq [[k v] ca]
     (doto out 
       (.writeObject k)
       (.writeInt (count v))
-      (#(doseq [s v] (.writeObject % s))))))
+      (#(doseq [s v] (.writeObject out s))))))
 
 (defn- cache-from-stream
-  [in]
+  [^java.io.ObjectInputStream in]
   (let [n (.readInt in )] 
     (loop [m (transient {})
            i 0]
@@ -134,7 +139,7 @@
 
 (defn to-stream!
   "writes cache to stream"
-  [out C]
+  [^java.io.ObjectOutputStream out C]
   (if (soft? C)
     (doto out
       (.writeBoolean true)
@@ -150,7 +155,7 @@
 
 
 (defn from-stream
-  [in] 
+  [^java.io.ObjectInputStream in] 
   (doto 
    (if (.readBoolean in)
      {:db (db/from-stream in) 
@@ -164,11 +169,11 @@
     ))
 
 
-(defn clean-soft-cache [ca]
+(defn clean-soft-cache [^HashMap ca]
   (when (-> ca (.values) (.removeIf
                           (reify java.util.function.Predicate
                             (test [_ arg]
-                              (nil? (.get arg))))))
+                              (nil? (.get ^SoftReference arg))))))
     (tap> "cleaned soft cache elements!")))
 
 (defn- to-cache
@@ -177,7 +182,7 @@
   (if (instance? java.util.HashMap ca)
     (do
       (doseq [[k v] elems]
-        (.put ca k (SoftReference. v)))
+        (.put ^HashMap ca k (SoftReference. v)))
       (clean-soft-cache ca))
     (swap! ca merge elems)))
 
