@@ -120,11 +120,10 @@
 (defn- cache-to-stream!
   [^java.io.ObjectOutputStream out ca]
   (.writeInt out (count ca))
-  (doseq [[k v] ca]
-    (doto out 
-      (.writeObject k)
-      (.writeInt (count v))
-      (#(doseq [s v] (.writeObject out s))))))
+  (doseq [[k v] ca] 
+    (.writeObject out k)
+    (.writeInt out (count v))
+    (doseq [s v] (.writeObject out s))))
 
 (defn- cache-from-stream
   [^java.io.ObjectInputStream in]
