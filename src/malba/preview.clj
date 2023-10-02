@@ -174,8 +174,7 @@
   (let [preview (preview-panel target evt-dispatch)
         dp (detail-panel)]
     (.add preview dp)
-    {:preview preview
+    {:preview-panel preview
      :refresh-fn #(refresh preview target)
      :reset-fn #(when target (.reset target) (refresh preview target))
      :show-details-fn (partial show-details dp)}))
-

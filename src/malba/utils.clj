@@ -2,12 +2,14 @@
 ;; This file is part of MALBA.
 
 (ns malba.utils
-  (:require
-   [clojure.string :as string]
-   [clojure.set :as set] 
-   [malba.algorithms.proto-algo :as a]
-   [malba.cache :as c]
-   [malba.algorithms.malba-algo :as malba-algo]))
+  (:require [clojure.set :as set]
+            [clojure.string :as string]
+            [malba.algorithms.malba-algo :as malba-algo]
+            [malba.algorithms.proto-algo :as a]
+            [malba.cache :as c]
+            [malba.gephi :as gephi]
+            [malba.gui :as gui]
+            [malba.logger :as l]))
 
 
 (import (java.awt.datatransfer StringSelection)
@@ -23,11 +25,11 @@
 
 (defn save-session!
   "save session to file"
-  [state ^java.io.File file]
+  [state ^String version ^java.io.File file]
   (with-open [outp (java.io.ObjectOutputStream.
                     (java.io.FileOutputStream. file))]
     ;write state without algo and cache
-    (.writeObject outp "0.8B")
+    (.writeObject outp version)
     (.writeObject outp (-> state
                            (dissoc :cache)
                            (dissoc :algo)))
@@ -39,7 +41,7 @@
   "load session from file"
   [^java.io.File file]
   (with-open [inp (java.io.ObjectInputStream. (java.io.FileInputStream. file))]
-    (tap> (.readObject inp)) ;version 
+    (l/debug (.readObject inp)) ;version 
     (let [state (.readObject inp)
           cache (c/from-stream inp)
           algo  (-> (state :algo-name) ;generate class from serialized map 
@@ -107,3 +109,62 @@
   [state pa]
   (not (= (pa :name) (-> (state :algo) a/get-params (get :name)))))
 
+(defn without-algo-buttons
+  "disable algorithm buttons and enable stop button when executing expr"
+  [expr]
+  (try
+    (gui/invoke :enable-algo-btns false)
+    (expr)
+    (finally (gui/invoke :enable-algo-btns true))))
+
+(defn show-results!
+  "update gephi graph and graph stats labes in UI, optionally clears graph
+  and resets view before"
+  ([state] (show-results! state false))
+  ([{:keys [algo cache]} clear]
+   (when clear (gephi/clear-graph))
+   (l/status "Updating Preview...")
+   (let [subgraph (a/subgraph algo)
+         surrounding (a/generate-surrounding algo)]
+     (-> (assemble-graph-info cache subgraph surrounding)
+         gephi/update-graph)
+     (gui/invoke :log-graph-size (format "Subgraph: %d nodes. Surrounding: %d nodes."
+                                         (count subgraph)
+                                         (count surrounding)))
+     (gui/invoke :log-parameters (a/get-params-as-string algo))
+     (gui/invoke :reset-preview)
+     (l/status "Preview updated."))))
+
+(defn update-ui!
+  "update user interface with current state values"
+  [{:keys [seed-file cache seed] :as state}]
+  (gui/invoke :set-initialized (and (some? seed) (some? cache)))
+  (gui/invoke :set-seed seed-file)
+  (when cache
+    (when (cache :db) (gui/invoke :set-db-info (cache :db)))
+    (when-let [nf (cache :network-file)] (gui/invoke :set-network-file nf)))
+  (when-let [algo (state :algo)] (gui/invoke :set-params (a/get-params algo))))
+
+(defn init-algo
+  "initializes algorithm if seed is loaded and network is available (cache not nil).
+   fetches parameters from gui"
+  [{:keys [seed cache] :as state}]
+  (if (and seed cache)
+    (let [_ (l/status "Initializing...")
+          valid-seeds (c/known-ids cache seed)]
+      (when (empty? valid-seeds) (throw (Exception. "None of the seeds found in network!")))
+      (l/text (format "Found %d of %d seeds in network." (count valid-seeds) (count seed)))
+      (let [pa (gui/invoke :get-params)
+            algo-name (pa :name)
+            new-state (-> state
+                          (assoc :algo (a/init (algo-from-name algo-name) cache valid-seeds))
+                          (update :algo a/set-params pa)
+                          (assoc :algo-name (pa :name)))]
+        (l/text (format ">>> Algorithm %s initialized." algo-name))
+        (gui/invoke :set-initialized true) ;activate algorithm control in ui 
+        (show-results! new-state true)
+        (l/status "Initialized.")
+        new-state))
+    (do
+      (gui/invoke :set-initialized false)
+      (dissoc state :algo))))

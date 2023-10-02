@@ -101,3 +101,4 @@ src/calva-fmt/atom-language-clojure/.bash_history
 
 # Portal
 .portal
+.vscode/settings.json

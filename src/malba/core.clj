@@ -21,82 +21,18 @@
 
 
 ;;GLOBALS
-(def version "0.5.0")
-(def db-conf-file "./database.edn")
-(def exit-on-close true)
-
-(def db-conf (atom nil))
-(def worker (atom nil))
+(def version "0.5.1")
+(def db-conf-file "database.edn")
+(def exit-on-close true) ;true for production
+(reset! l/DEBUG false) ;toggle debugging messages
 
 (defn init-worker
   "init worker agent for time-consuming tasks initiated by user" []
-  (let [err-handler (fn [_ e]
-                      (tap> e)
-                      (l/error (string/join [(ex-message e) (ex-cause e)])))]
+  (let [err-handler (fn [_ e] (l/error (string/join [(ex-message e) (ex-cause e)])))]
     (doto (agent {})
       (set-error-handler! err-handler)
       (set-error-mode! :continue)
       (set-validator! (fn [state] (map? state))))))
-
-(defn show-results!
-  "update gephi graph and graph stats labes in UI, optionally clears graph
-  and resets view before"
-  ([state] (show-results! state false))
-  ([{:keys [algo cache]} clear]
-   (when clear (gephi/clear-graph))
-   (l/status "Updating Preview...")
-   (let [subgraph (a/subgraph algo)
-         surrounding (a/generate-surrounding algo)]
-     (-> (u/assemble-graph-info cache subgraph surrounding)
-         gephi/update-graph)
-     (gui/invoke :log-graph-size (format "Subgraph: %d nodes. Surrounding: %d nodes."
-                                         (count subgraph)
-                                         (count surrounding)))
-     (gui/invoke :log-parameters (a/get-params-as-string algo))
-     (gui/reset-preview)
-     (l/status "Preview updated."))))
-
-(defn update-ui!
-  "update user interface with current state values"
-  [{:keys [seed-file cache seed] :as state}]
-  (gui/invoke :set-initialized (and (some? seed) (some? cache)))
-  (gui/invoke :set-seed seed-file)
-  (when cache
-    (when (cache :db) (gui/invoke :set-db-info (cache :db)))
-    (when-let [nf (cache :network-file)] (gui/invoke :set-network-file nf)))
-  (when-let [algo (state :algo)] (gui/invoke :set-params (a/get-params algo))))
-
-(defn init-algo
-  "initializes algorithm if seed is loaded and network is available (cache not nil).
-   fetches parameters from gui"
-  [{:keys [seed cache] :as state}]
-  (if (and seed cache)
-    (let [_ (l/status "Initializing...")
-          valid-seeds (c/known-ids cache seed)]
-      (when (empty? valid-seeds) (throw (Exception. "None of the seeds found in network!")))
-      (l/text (format "Found %d of %d seeds in network." (count valid-seeds) (count seed)))
-      (let [pa (gui/invoke :get-params)
-            algo-name (pa :name)
-            new-state (-> state
-                          (assoc :algo (a/init (u/algo-from-name algo-name) cache valid-seeds))
-                          (update :algo a/set-params pa)
-                          (assoc :algo-name (pa :name)))]
-        (l/text (format ">>> Algorithm %s initialized." algo-name))
-        (gui/invoke :set-initialized true) ;activate algorithm control in ui 
-        (show-results! new-state true)
-        (l/status "Initialized.")
-        new-state))
-    (do
-      (gui/invoke :set-initialized false)
-      (dissoc state :algo))))
-
-(defn without-algo-buttons
-  "disable algorithm buttons and enable stop button when executing expr"
-  [expr]
-  (try
-    (gui/invoke :enable-algo-btns false)
-    (expr)
-    (finally (gui/invoke :enable-algo-btns true))))
 
 (defn event-consume
   "main work horse. this function is send to the worker agent
@@ -105,10 +41,18 @@
   [state event params]
   (l/event-to-status event :start)
   (doto (condp = event
-          "save-session" (doto state (u/save-session! params))
+          "read-db-config" (if-let [conf (f/load-config db-conf-file)]
+                             (do 
+                               (l/text (format "Database config loaded from %s." db-conf-file))
+                               (gui/invoke :set-db-info conf)
+                               (assoc state :db-config conf))
+                             (do 
+                               (l/error (format "Database config not readable from %s!\n Database mode will not work." db-conf-file))
+                               (assoc state :db-config nil)))
+          "save-session" (doto state (u/save-session! version params))
           "load-session" (let [state (u/load-session params)]
                            (l/text (format ">>> Loaded session from %s." (.getName ^java.io.File params)))
-                           (doto state (show-results! true) update-ui!))
+                           (doto state (u/show-results! true) u/update-ui!))
           "load-seed" (let [seed-file (.getName ^java.io.File params)
                             seed (f/load-seed params)]
                         (when (empty? seed)
@@ -117,19 +61,18 @@
                         (-> state
                             (assoc :seed seed)
                             (assoc :seed-file seed-file)
-                            (doto update-ui!)))
+                            (doto u/update-ui!)))
           "load-network" (let [network-file (.getName ^java.io.File params)
                                C (c/from-file params)]
                            (l/text (format ">>> Loaded network from %s." network-file))
-                           (-> state (assoc :cache C) (doto update-ui!)))
+                           (-> state (assoc :cache C) (doto u/update-ui!)))
           "db-connect" (if-let  [db (get-in state [:cache :db])]
                          (assoc-in state [:cache :db]
                                    (-> (merge db (gui/invoke :get-db-info))
                                        db/close!
                                        db/connect)) ;reconnect
-                         (let [C (-> @db-conf
-                                     (merge (gui/invoke :get-db-info))
-                                     (doto (tap>))
+                         (let [C (-> (get state :db-config)
+                                     (merge (gui/invoke :get-db-info)) 
                                      db/connect
                                      c/init ;initalize cache with db-connection 
                                      )]
@@ -138,9 +81,9 @@
                                  (get-in state [:cache :db]))
                           (assoc state :cache (c/init (get-in state [:cache :db])))
                           state)
-          "algo-step" (without-algo-buttons
+          "algo-step" (u/without-algo-buttons
                        #(let [pa (gui/invoke :get-params)]
-                          (if (u/algo-changed? state pa) (init-algo state)
+                          (if (u/algo-changed? state pa) (u/init-algo state)
                               (let [algo (-> (state :algo) (a/set-params pa) a/step)
                                     error (a/error algo)]
                                 (cond
@@ -151,11 +94,11 @@
                                   (a/interrupted? algo) (do (l/text ">>> Step interrupted.") state)
                                   (a/terminated? algo)
                                   (do (l/text ">>> Terminated: no new elements added in cycle!")
-                                      (doto (assoc state :algo algo) show-results!))
-                                  :else (doto (assoc state :algo algo) show-results!))))))
-          "algo-run" (without-algo-buttons
+                                      (doto (assoc state :algo algo) u/show-results!))
+                                  :else (doto (assoc state :algo algo) u/show-results!))))))
+          "algo-run" (u/without-algo-buttons
                       #(let [pa (gui/invoke :get-params)
-                             state (if (u/algo-changed? state pa) (init-algo state) state)
+                             state (if (u/algo-changed? state pa) (u/init-algo state) state)
                              algo (-> (state :algo) (a/set-params pa) a/run)
                              error (a/error algo)]
                          (cond
@@ -165,15 +108,15 @@
                            (throw (Error. "Subgraph too large!"))
                            (a/interrupted? algo)
                            (do (l/text (format ">>> Interrupted after %d cycles!" (a/steps algo)))
-                               (doto (assoc state :algo algo) show-results!))
+                               (doto (assoc state :algo algo) u/show-results!))
                            (a/terminated? algo)
                            (do (l/text (format ">>> Terminated after %d cycles!" (a/steps algo)))
-                               (doto (assoc state :algo algo) show-results!))
+                               (doto (assoc state :algo algo) u/show-results!))
                            :else (throw (Exception. "Unknown algorithm state.")))))
-          "algo-reset" (do (gephi/view-reset) (init-algo state))
-          "algo-search" (without-algo-buttons
+          "algo-reset" (do (gephi/view-reset) (u/init-algo state))
+          "algo-search" (u/without-algo-buttons
                          #(let [pa (gui/invoke :get-params)
-                                state (if (u/algo-changed? state pa) (init-algo state) state)]
+                                state (if (u/algo-changed? state pa) (u/init-algo state) state)]
                             (l/text ">>> Starting parameter search...")
                             (let [{:keys [interrupted params size]}
                                   (-> (state :algo) (a/set-params pa) a/search)]
@@ -186,65 +129,56 @@
                                   (l/text (format "Max: %s subgraph: %s" (algo-params/to-string params) size))
                                   (l/text "Parameters updated, run algorithm to view subgraph.")
                                   (doto (update state :algo a/set-params params)
-                                    (update-ui!)))))
+                                    (u/update-ui!)))))
                             state))
-          "view-reset" (do (gephi/view-reset) (gui/reset-preview) state)
-          "view-surrounding" (do (gephi/view-surrounding params) (gui/refresh) state)
-          "view-neighbors" (do (gephi/view-neighbors params) (gui/refresh) state)
+          "view-reset" (do (gephi/view-reset) (gui/invoke :reset-preview) state)
+          "view-surrounding" (do (gephi/view-surrounding params) (gui/invoke :refresh-preview) state)
+          "view-neighbors" (do (gephi/view-neighbors params) (gui/invoke :refresh-preview) state)
           "hovered" (do (when (> 1000 (- (System/currentTimeMillis) (params :time)))
                           (let [node-info (gephi/hovered (params :event))]
-                            (gui/show-details (u/generate-detail-str node-info))
-                            (gui/refresh)))
+                            (gui/invoke :show-details (u/generate-detail-str node-info))
+                            (gui/invoke :refresh-preview)))
                         state)
           "copy-to-clipboard" (let [node-info (gephi/hovered params)]
                                 (u/copy-to-clipboard (u/generate-detail-str node-info))
                                 state)
-          "layout" (do (gephi/layout-graph params) (gui/reset-preview) state)
+          "layout" (do (gephi/layout-graph params) (gui/invoke :reset-preview) state)
           "export" (do (gephi/export params) state)
           "window-close" (when (state :cache)
                            (db/close! (get-in state [:cache :db])))
-          (throw (IllegalAccessError. (format "%s not yet implemented..." event))))
+          (throw (IllegalAccessError. (format "%s not implemented..." event))))
     ((fn [_] (l/event-to-status event :stop)))))
 
 
 (defn event-dispatch
   "called from event-callbacks in ui thread. events are send to a worker agent and thus will be queued and consumed sequentially due to concurrency with gephi."
-  ([^String event] (event-dispatch event {}))
-  ([^String event params]
-   (let [worker @worker] ;dereferences atom containing worker
-     (l/debug (format "Dispatching event %s with parameters %s" event (str params)))
-     (if (= event "algo-stop")
-       (do (reset! (get-in @worker [:algo :interrupted]) true)
-           (l/status "Stopping algorithm..."))
-       (do
-         (send worker event-consume event params)
+  ([worker ^String event] (event-dispatch worker event {}))
+  ([worker ^String event params] 
+   (l/debug (format "Dispatching event %s with parameters %s" event (str params)))
+   (if (= event "algo-stop")
+     (do (reset! (get-in @worker [:algo :interrupted]) true)
+         (l/status "Stopping algorithm..."))
+     (do
+       (send worker event-consume event params)
        ;try algorithm initialization automatically after the following events:
-         (when (contains? #{"db-connect" "load-seed" "load-network"} event)
-           (send worker init-algo)))))
+       (when (contains? #{"db-connect" "load-seed" "load-network"} event)
+         (send worker u/init-algo))))
    nil))
 
 (defn -main [& _]
-  ;initialize background worker thread
-  (reset! worker (init-worker))
-  ;init GUI
-  (gui/init event-dispatch {:version version :exit_on_close exit-on-close})
-  ;init gephi and preview area with rendering target
-  (gui/attach-preview (gephi/init) event-dispatch)
-  ;set default algorithm parameters
-  (gui/invoke :set-params (-> (malba-params/->Params) (algo-params/init) (algo-params/get-vars)))
-  ;load db configuration
-  (if-let [conf (f/load-config db-conf-file)]
-    (do (reset! db-conf conf)
-        (l/text (format "Database config loaded from %s." db-conf-file)))
-    (l/error (format "Database config not readable from %s!\n Database mode will not work."
-                     db-conf-file)))
-  ;send db config to UI
-  (gui/invoke :set-db-info @db-conf))
-
-
+  (let [worker (init-worker)]
+    (gui/init {:version version
+               :exit_on_close exit-on-close
+               :preview (gephi/init) ;setup render target for preview
+               :event-dispatch (partial event-dispatch worker)})
+    (event-dispatch worker "read-db-config")
+    ;send default algorithm parameters to UI 
+    (gui/invoke :set-params (-> (malba-params/->Params) (algo-params/init) (algo-params/get-vars)))
+    worker))
 
 (comment
   ;Start program with 
-  (-main))
-
-
+  (-main)
+  ;for testing useful:
+  (reset! l/DEBUG true)
+  (def worker (-main)))

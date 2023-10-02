@@ -55,7 +55,6 @@
 
 (deftest algorithm-test
   (let [params (merge (malba.algorithms.malba-params/->Params) params)
-        _ (tap> params)
         C-file (c/from-file "test/data/networkWOS.txt")
         C-db (c/init (db/connect (-> "test/data/database-local.edn" slurp read-string)))
         seed (f/load-seed  "test/data/seedWOS.txt")

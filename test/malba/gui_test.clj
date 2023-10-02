@@ -1,11 +1,12 @@
 (ns malba.gui-test
   (:require
    [clojure.test :refer [deftest is use-fixtures]]
-   [malba.gui :refer [init]]))
+   [malba.gui :refer [init]]
+   [malba.gephi :as gephi]))
 
 
 (defn- with-ui [t]
-  (init identity {:version "test" :exit_on_close false}) 
+  (init {:preview (gephi/init) :event-dispatch identity :version "test" :exit_on_close false}) 
   (Thread/sleep 100) 
   (t) 
   )

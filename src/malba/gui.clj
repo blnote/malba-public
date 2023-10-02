@@ -4,7 +4,7 @@
 (ns malba.gui
   "graphical user interface
    initialization via init sets an atom UI containing the GUI interface functions
-   which are accessed by malba.core via (invoke ...)"
+   which can be called via (gui/invoke function-name)"
   (:require [clojure.string :as string]
             [malba.preview]))
 
@@ -18,50 +18,17 @@
         (javax.swing SwingUtilities KeyStroke)
         (javax.swing.border CompoundBorder EmptyBorder))
 
+(def current-dir (atom (File. (System/getProperty "user.home"))))
+
 (def ^{:private true} UI (atom {})) ;contains all relevant gui update functions
 
-
-(defn refresh "refresh preview"
-  []
-  (when-let [r (@UI :refresh)]
-    (r)))
-
-(defn reset-preview []
-  (when-let [r (@UI :reset)]
-    (r)
-    (@UI :refresh)))
-
-(defn show-details [s]
-  (when-let [f (@UI :show-details)]
-    (f s)))
-
 (defn invoke
-  "accesses update functions in UI"
+  "interface to UI update/access functions, see UI structure generated at initialization"
   [fname & args]
   (when-let [f (@UI fname)]
     (if (or (= fname :get-db-info) (= fname :get-params))
       (apply f args)
-      (SwingUtilities/invokeLater #(apply f args)))
-    #_(throw (IllegalArgumentException. (format "Unknown UI function: %s !" fname)))))
-
-(defn attach-preview [target evt-dispatch]
-  (let [canvas ^JPanel (@UI :canvas)
-        {:keys [preview
-                refresh-fn reset-fn show-details-fn]} (malba.preview/init-preview target evt-dispatch)]
-    (SwingUtilities/invokeAndWait
-     (fn []
-       (doto canvas
-         (.removeAll) ;//TODO remove for production
-         (.addComponentListener (proxy [ComponentAdapter] []
-                                  (componentShown [_] (refresh-fn))
-                                  (componentResized [_] (refresh-fn))))
-         (.add ^JPanel preview BorderLayout/CENTER))))
-    (swap! UI assoc :refresh refresh-fn)
-    (swap! UI assoc :reset reset-fn)
-    (swap! UI assoc :show-details show-details-fn)))
-
-(def current-dir (atom (File. (System/getProperty "user.home"))))
-
+      (SwingUtilities/invokeLater #(apply f args)))))
 
 (defn- file-dialog
   "opens file dialog for loading (load=true) or saving. 
@@ -80,52 +47,52 @@
        (.getSelectedFile filechooser)))))
 
 
-(defn- action-btn-seed [evt-dispatch]
+(defn- action-btn-seed [event-dispatch]
   (when-let [selected-file (file-dialog true)]
-    (evt-dispatch "load-seed" selected-file)))
+    (event-dispatch "load-seed" selected-file)))
 
-(defn- action-btn-file-network [evt-dispatch]
+(defn- action-btn-file-network [event-dispatch]
   (when-let [selected-file (file-dialog true)]
-    (evt-dispatch "load-network" selected-file)))
+    (event-dispatch "load-network" selected-file)))
 
-(defn- action-btn-cache [evt-dispatch]
-  (evt-dispatch "clear-cache"))
+(defn- action-btn-cache [event-dispatch]
+  (event-dispatch "clear-cache"))
 
-(defn- action-btn-connect [evt-dispatch]
-  (evt-dispatch "db-connect"))
-(defn- action-btn-load [evt-dispatch]
+(defn- action-btn-connect [event-dispatch]
+  (event-dispatch "db-connect"))
+(defn- action-btn-load [event-dispatch]
   (when-let [selected-file (file-dialog true)]
-    (evt-dispatch "load-session" selected-file)))
+    (event-dispatch "load-session" selected-file)))
 
-(defn- action-btn-save [evt-dispatch]
+(defn- action-btn-save [event-dispatch]
   (when-let [selected-file (file-dialog false "malba.session")]
-    (evt-dispatch "save-session" selected-file)))
+    (event-dispatch "save-session" selected-file)))
 
-(defn- action-export [evt-dispatch ^String mode]
+(defn- action-export [event-dispatch ^String mode]
   (when-let [selected-file (file-dialog false (string/join ["malba." mode]))]
-    (evt-dispatch "export" [selected-file mode])))
+    (event-dispatch "export" [selected-file mode])))
 
-(defn- action-btn-reset [evt-dispatch]
-  (evt-dispatch "algo-reset"))
-(defn- action-btn-stop [evt-dispatch]
-  (evt-dispatch "algo-stop"))
-(defn- action-btn-run [evt-dispatch]
-  (evt-dispatch "algo-run"))
-(defn- action-btn-search [evt-dispatch]
-  (evt-dispatch "algo-search"))
-(defn- action-btn-step [evt-dispatch]
-  (evt-dispatch "algo-step"))
+(defn- action-btn-reset [event-dispatch]
+  (event-dispatch "algo-reset"))
+(defn- action-btn-stop [event-dispatch]
+  (event-dispatch "algo-stop"))
+(defn- action-btn-run [event-dispatch]
+  (event-dispatch "algo-run"))
+(defn- action-btn-search [event-dispatch]
+  (event-dispatch "algo-search"))
+(defn- action-btn-step [event-dispatch]
+  (event-dispatch "algo-step"))
 
-(defn- action-btn-reset-view [evt-dispatch]
-  (evt-dispatch "view-reset"))
-(defn- action-btn-surrounding [evt-dispatch btn]
-  (evt-dispatch "view-surrounding" (.isSelected ^JToggleButton btn)))
-(defn- action-btn-layout-frucht [evt-dispatch]
-  (evt-dispatch "layout" "frucht"))
-(defn- action-btn-layout-yifan [evt-dispatch]
-  (evt-dispatch "layout" "yifan"))
-(defn- action-btn-layout-overlap [evt-dispatch]
-  (evt-dispatch "layout" "overlap"))
+(defn- action-btn-reset-view [event-dispatch]
+  (event-dispatch "view-reset"))
+(defn- action-btn-surrounding [event-dispatch btn]
+  (event-dispatch "view-surrounding" (.isSelected ^JToggleButton btn)))
+(defn- action-btn-layout-frucht [event-dispatch]
+  (event-dispatch "layout" "frucht"))
+(defn- action-btn-layout-yifan [event-dispatch]
+  (event-dispatch "layout" "yifan"))
+(defn- action-btn-layout-overlap [event-dispatch]
+  (event-dispatch "layout" "overlap"))
 
 (defn- log-text [^JProgressBar progressBar ^JTextArea areaLog msg]
   (when (some? msg)
@@ -144,11 +111,12 @@
     (.setCaretPosition (.. areaLog (getDocument) (getLength)))))
 
 
-(defn- initComponents [evt-dispatch {:keys [version exit_on_close]}]
+(defn- initComponents [{:keys [event-dispatch version exit_on_close preview]}]
   (try
     (UIManager/setLookAndFeel (FlatLightLaf.))
     (UIManager/put "MenuItem.minimumIconSize" (Dimension. 0 0))
-    (catch Exception e  (tap> (.getMessage e))))
+    (catch Exception e  (binding [*out* *err*]
+                          (println (.getMessage e)) )))
   (let [buttonGroupNetwork (new ButtonGroup)
         panelControl (new JPanel)
         panelSeed (new JPanel)
@@ -183,7 +151,7 @@
         lblSubSize (new JLabel)
         txtSubSize (new JTextField 4)
         lblMaxParents (new JLabel)
-        txtMaxParents (new JTextField 4) 
+        txtMaxParents (new JTextField 4)
         panelAlgo (new JPanel)
         panelAlgoButtons (new JPanel)
         btnSearch (new JButton)
@@ -224,10 +192,10 @@
         action-fn (fn ;helper to generate click events
                     ([f] (proxy [ActionListener] []
                            (actionPerformed [_]
-                             (f evt-dispatch))))
+                             (f event-dispatch))))
                     ([f param] (proxy [ActionListener] []
                                  (actionPerformed [_]
-                                   (f evt-dispatch param)))))
+                                   (f event-dispatch param)))))
         ;select everything when focusing in text boxes:
         focus-listener (proxy [FocusAdapter] []
                          (focusGained [^FocusEvent evt]
@@ -240,7 +208,10 @@
                       (.setEnabled btnFileNetwork (not bool))
                       (.setSelected radioFile (not bool))
                       (.setSelected radioDB bool)
-                      (when bool (.setText radioFile "from file:")))]
+                      (when bool (.setText radioFile "from file:")))
+        {:keys [preview-panel ;generate preview panel
+                refresh-fn reset-fn show-details-fn]} (malba.preview/init-preview preview event-dispatch)
+        ]
 
     ;;seed panel
     (doto lblSeed
@@ -511,7 +482,7 @@
       (.add panelStatus))
 
     ;;panel Results
-
+    
     (doto panelGraphStatus
       (.setLayout (BorderLayout.))
       (.setBorder (BorderFactory/createEmptyBorder 1 5 1 5))
@@ -520,12 +491,17 @@
       (.add lblGraphStatus BorderLayout/WEST)
       (.add lblParams BorderLayout/EAST)
       #_(.add (Box.Filler. (Dimension. 0 0) (Dimension. 0 0) (Dimension. 32767 32767)) BorderLayout/CENTER))
-
+    
+    ;;panel Preview
     (doto canvas
       (.setBackground Color/WHITE)
       (.setBorder (BorderFactory/createEmptyBorder 5 5 5 5))
       (.setRequestFocusEnabled false)
-      (.setLayout (BorderLayout.)))
+      (.setLayout (BorderLayout.))
+      (.addComponentListener (proxy [ComponentAdapter] [] ;add preview panel
+                               (componentShown [_] (refresh-fn))
+                               (componentResized [_] (refresh-fn))))
+      (.add ^JPanel preview-panel BorderLayout/CENTER))
 
     (doto btnLayoutYifan
       (.setText "Yifan Hu Layout")
@@ -607,12 +583,12 @@
 
     (doto frame
       (.setTitle (string/join ["MALBA Version " version]))
-      
-      (.setDefaultCloseOperation  (if exit_on_close 
+
+      (.setDefaultCloseOperation  (if exit_on_close
                                     javax.swing.WindowConstants/EXIT_ON_CLOSE
                                     javax.swing.WindowConstants/DISPOSE_ON_CLOSE))
       (.addWindowListener (proxy [WindowAdapter] []
-                            (windowClosing [evt] (evt-dispatch "window-close"))))
+                            (windowClosing [evt] (event-dispatch "window-close"))))
       (.setJMenuBar jMenuBar2)
       (.pack)
       (.setVisible true))
@@ -626,18 +602,18 @@
           enable-result-btns (fn [^Boolean bool]
                                (->> (.getComponents panelGraphButtons)
                                     (map #(.setEnabled ^java.awt.Component % bool))
-                                    (dorun))) 
+                                    (dorun)))
 
           set-initialized (fn [^Boolean bool]
                             (.setEnabled btnSave bool)
                             (.setEnabled menuExport bool)
-                            (enable-algo-btns bool) 
+                            (enable-algo-btns bool)
                             (enable-result-btns bool)
                             (.setEnabled btnStop false))]
-
-
       (set-initialized false)
-      (reset! UI {:canvas canvas
+      (reset! UI {:refresh-preview refresh-fn ;preview event functions
+                  :reset-preview reset-fn
+                  :show-details show-details-fn
                   :task-started #(do (.setBackground progressBar (Color. 209 209 209))
                                      (.setIndeterminate progressBar true)
                                      (when % (.setText lblStatusDB %)))
@@ -688,5 +664,5 @@
                   :log-text (partial log-text progressBar areaLog)
                   :log-error (partial log-error progressBar areaLog)}))))
 
-(defn init [evt-dispatch opts]
-  (SwingUtilities/invokeAndWait #(initComponents evt-dispatch opts)))
+(defn init [params]
+  (SwingUtilities/invokeAndWait #(initComponents params)))
