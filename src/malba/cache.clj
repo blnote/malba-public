@@ -170,11 +170,10 @@
 
 
 (defn clean-soft-cache [^HashMap ca]
-  (when (-> ca (.values) (.removeIf
-                          (reify java.util.function.Predicate
-                            (test [_ arg]
-                              (nil? (.get ^SoftReference arg))))))
-    (tap> "cleaned soft cache elements!")))
+  (-> ca (.values) (.removeIf
+                    (reify java.util.function.Predicate
+                      (test [_ arg]
+                        (nil? (.get ^SoftReference arg)))))))
 
 (defn- to-cache
   "write elements (given as map) to cache"
