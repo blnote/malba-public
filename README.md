@@ -58,7 +58,7 @@ Further it is possible to save a session including the current parameters and th
     
 
 ## License
-The source code in this repository is licensed under the MIT License. It is written in [Clojure](https://www.clojure.org) using the [Gephi-Toolkit](https://github.com/gephi/gephi/wiki/Toolkit) for graph visualization. However, the Gephi-Toolkit itself and its third-party components are under different licenses, see [here](https://gephi.org/developers/license/). By downloading and using the provided binary you are agreeing to these respective licenses. See LICENSE.md for detailed information.
+The source code in this repository is licensed under the MIT License. It is written in [Clojure](https://www.clojure.org) using the [Gephi-Toolkit](https://github.com/gephi/gephi/wiki/Toolkit) for graph visualization. However, the Gephi-Toolkit itself and its third-party components are under different licenses, see [here](https://gephi.org/developers/license/). By downloading and using the provided binary you are agreeing to these respective licenses. See LICENSE file for detailed information.
 
 ## Compiling from source code
 You need
