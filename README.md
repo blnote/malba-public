@@ -13,7 +13,7 @@ This is an implementation of the MALBA algorithm for bibliometric networks. MALB
 ## Usage
 The program comes with two configuration files: `malba-algo.edn`  and `database.edn` to configure algorithm parameters and database settings. In general the program should work using the default settings, however, the database is evolving and may change its relation names. In this case the SQL statements in `database.edn` have to be adjusted.
 
-For convenience, your database credentials can be written in `database.edn` to avoid entering them repeatedly.
+For convenience, your database credentials can be put in `database.edn` to avoid entering them repeatedly.
 ### Loading seeds and network
 To start working with MALBA you need to load a seed, which is a local text file containing one publication id per line. Currently publication ids are of the format `WOS:000000000000000`.
 Next you need to decide if you want to work with a database or a local citation network. 
@@ -27,12 +27,12 @@ When seed and network have been loaded successfully the algorithm initializes an
 - `Reset:` resets the subgraph to the original seed.
 
 #### MALBA parameters (see publication for details):
-There are 3 parameters controlling the inclusion of a candidate publication. A publication is added to the current subgraph if
+There are three parameters controlling the inclusion of a candidate publication. A publication is added to the current subgraph if
 - the subgraph cites it at least `DCout` times (an integer)
 - the ratio of its citations that are in the subgraph is at least `DCin` (0.0-1.0) 
-- the ratio of its citations that are *citations* of the subgraph ist at least `BC` (0.0-1.0)
+- the ratio of its citations that are *citations* of the subgraph is at least `BC` (0.0-1.0)
 
-Further there are 2 parameters that limit the growth of the subgraph
+Further there are two parameters limiting subgraph growth
 - `max. graph size`: the maximal size of the subgraph
 - `max. parents`: to avoid an explosion in the number of candidate publications we only include the "parents" (citing publications) of candidates that are cited at most `max. parents` times (e.g. 1000). Note that  parents excluded this way may still end up in the candidate set if they cite another less cited candidate. 
 
@@ -50,6 +50,7 @@ The current subgraph is always displayed on the right hand side. You can
 ### Exporting results
 
 Results can be exported as `csv`, `pdf` or as `gephi` file through `Export` in the main menu. Note that only the current visible graph will be exported, making it e.g. possible to export only the neighbors of a selected publication).
+
 Further it is possible to save a session including the current parameters and the cached database results to possibly speed up future applications (citation information from the database is cached as long as memory is available).
 
     
