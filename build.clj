@@ -4,7 +4,7 @@
 ;build command: clojure -T:build jar
 
 (def lib 'tu-berlin/malba)
-(def version "0.5.0")
+(def version "0.5.1")
 (def class-dir "target/classes")
 (def basis (b/create-basis {:project "deps.edn" :aliases [:toolkit :base]}))
 (def uberbasis (b/create-basis {:project "deps.edn" :aliases [:base]}))
