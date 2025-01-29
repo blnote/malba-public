@@ -3,11 +3,13 @@
 
 (ns malba.database
   "interface function to postgres publication database called from cache if entries are missing."
-  (:require [clojure.set :as set]
-            [clojure.string :as string]
-            [next.jdbc :as jdbc]
-            [next.jdbc.prepare :as jdbc-p]
-            [next.jdbc.result-set :as jdbc-rs]))
+  (:require
+   [clojure.set :as set]
+   [clojure.string :as string]
+   [malba.logger :as l]
+   [next.jdbc :as jdbc]
+   [next.jdbc.prepare :as jdbc-p]
+   [next.jdbc.result-set :as jdbc-rs]))
 
 (defn- insert-ids
   "insert ids in sql string from config file by replacing IDLIST"
@@ -37,6 +39,7 @@
     conf
     (let [conf (assoc conf :jdbcUrl (string/join ["jdbc:postgresql://" (conf :url)]))
           conn (jdbc/get-connection conf)]
+      (l/debug "reconnecting to db")
       (-> conf
           (assoc :conn conn)
           (assoc :prepared-cites
@@ -48,7 +51,8 @@
                  (mapv (fn [size]
                          (let [sql-str (insert-ids (conf :cited-by-sql) (sql-?-string size))]
                            (jdbc/prepare conn [sql-str]
-                                         {:timeout (conf :sql-timeout-in-seconds)}))) (conf :batch-sizes)))))))
+                                         {:timeout (conf :sql-timeout-in-seconds)}))) (conf :batch-sizes)))
+          (#(do (l/debug "reconnected!") %))))))
 
 
 
@@ -88,8 +92,9 @@
 
 (defn- fetch-details-main
   "fetch publication info from items table given db configuration
-   for keys in details map"
+   for keys in details map" 
   [db details]
+  (l/debug "fetching main details...")
   (let [{:keys [conn details-sql sql-timeout-in-seconds]} db
         id-str (sql-id-string (keys details))
         sql (insert-ids details-sql id-str)
@@ -103,8 +108,9 @@
                                      source_title (assoc :source_title source_title)))) details rs)))
 (defn- fetch-details-authors
   "fetch author info from authors table given db configuration
-   for keys in details map"
+   for keys in details map" 
   [db details]
+  (l/debug "fetching author infos...")
   (let [{:keys [conn authors-sql sql-timeout-in-seconds]} db
         id-str (sql-id-string (keys details))
         sql (insert-ids authors-sql id-str)
@@ -118,6 +124,7 @@
 (defn- fetch-details-missing
   "try to obtain publication details from ref table for ids not found in items table"
   [db details]
+  (l/debug "fetching missing publication details...")
   (let [missing (->> details (filter #(empty? (val %))) (map key))
         aut-tf (fn [^java.sql.Array ref_auts]
                  (when-let [s (first (.getArray ref_auts))]
@@ -142,18 +149,21 @@
   [db ids]
   (if (empty? ids) {}
       (let [db (connect db)]
+        (l/debug (format "fetching details for %d publications" (count ids)))
         (->> ids
              (into {} (map (fn [id] [id {}])))
              (fetch-details-main db)
              (fetch-details-authors db)
              (fetch-details-missing db)
-             (add-detail-labels)))))
+             (add-detail-labels)
+             (#(do (l/debug "fetching details done.") %))))))
 
 
 (defn fetch-citations
   "get map of citation data for a set of ids from database using prepared statements. mode can either be :cites or :cited-by. throws IllegalArgumentException whenever size of ids > max-query-size."
-  [db mode ids]
+  [db mode ids] 
   (let [{:keys [max-query-size batch-sizes prepared-cites prepared-cited-by]} (connect db)]
+    (l/debug "fetching citations")
     (if (> (count ids) max-query-size)
       (throw (new IllegalArgumentException (format "SQL larger than MAX-QUERY-SIZE: (%d > %d) " (count ids) max-query-size)))
       (loop [ids ids
@@ -173,8 +183,11 @@
                            (jdbc-p/set-parameters
                             (concat cur-ids
                                     (repeat (- batch-sz (count cur-ids)) ""))))
-
+                  _ (l/debug (format "executing sql statement with batch size %d for ids %d" 
+                                     batch-sz 
+                                     (count ids) ))
                   m (->> (jdbc/execute! stmt nil {:builder-fn jdbc-rs/as-unqualified-maps})
+                         (#(do (l/debug "results received...") %))
                          (filter #(and (% :item_id_cited) (% :item_id_citing)))
                          (reduce (fn [res {:keys [^String item_id_cited ^String item_id_citing]}]
                                    (let [entry (if (= mode :cites)
@@ -182,6 +195,7 @@
                                                  {(.intern item_id_cited) #{(.intern item_id_citing)}})]
                                      (merge-with set/union res entry)))
                                  {}))]
+              (l/debug "processing result")
               (recur (drop batch-sz ids) (merge-with set/union C m))))))))
 
 

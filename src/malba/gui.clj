@@ -58,7 +58,7 @@
 
 (defn- action-btn-cache [event-dispatch]
   (let [response (JOptionPane/showConfirmDialog
-                  nil "This will clear the session indpendent cache. Proceed?" "Confirm"
+                  nil "This will clear the global (session independent) disk cache. Proceed?" "Clear Cache?"
                   JOptionPane/YES_NO_OPTION)]
     (when (= response JOptionPane/YES_OPTION) 
       (event-dispatch "clear-cache"))))

@@ -84,8 +84,10 @@
                          (db/fetch-citations db mode ids))
           _ (when (> n 100) (l/status (format "Loading %d entries from db done." n)))
           store (C :store)]
+      (l/debug "writing to cache...")
       (d/transact-kv store (name mode) (->> new-entries
-                                         (mapv (fn [[k v]] [:put k v]))))
+                                            (mapv (fn [[k v]] [:put k v]))))
+      (l/debug "done.")
       (log C)
       new-entries)))
 
