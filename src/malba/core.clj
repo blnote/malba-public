@@ -21,9 +21,9 @@
 
 
 ;;GLOBALS
-(def version "0.5.1")
-(def db-conf-file "database.edn")
-(def exit-on-close true) ;true for production
+(def version "0.5.2")
+(def db-conf-file "test/data/database-local.edn")
+(def exit-on-close false) ;true for production
 (reset! l/DEBUG false) ;toggle debugging messages
 
 (defn init-worker
@@ -42,11 +42,11 @@
   (l/event-to-status event :start)
   (doto (condp = event
           "read-db-config" (if-let [conf (f/load-config db-conf-file)]
-                             (do 
+                             (do
                                (l/text (format "Database config loaded from %s." db-conf-file))
                                (gui/invoke :set-db-info conf)
                                (assoc state :db-config conf))
-                             (do 
+                             (do
                                (l/error (format "Database config not readable from %s!\n Database mode will not work." db-conf-file))
                                (assoc state :db-config nil)))
           "save-session" (doto state (u/save-session! version params))
@@ -72,15 +72,12 @@
                                        db/close!
                                        db/connect)) ;reconnect
                          (let [C (-> (get state :db-config)
-                                     (merge (gui/invoke :get-db-info)) 
+                                     (merge (gui/invoke :get-db-info))
                                      db/connect
                                      c/init ;initalize cache with db-connection 
                                      )]
                            (-> state (assoc :cache C))))
-          "clear-cache" (if (and (state :cache) ;if cache and db info exists
-                                 (get-in state [:cache :db]))
-                          (assoc state :cache (c/init (get-in state [:cache :db])))
-                          state)
+          "clear-cache" (update state :cache c/clear!)
           "algo-step" (u/without-algo-buttons
                        #(let [pa (gui/invoke :get-params)]
                           (if (u/algo-changed? state pa) (u/init-algo state)
@@ -181,4 +178,7 @@
   (-main)
   ;for testing useful:
   (reset! l/DEBUG true)
-  (def worker (-main)))
+  (def worker (-main)) 
+  (set! *warn-on-reflection* true) 
+  (keys (-> @worker :cache :db))
+  )

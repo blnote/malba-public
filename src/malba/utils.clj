@@ -42,7 +42,7 @@
   [^java.io.File file]
   (with-open [inp (java.io.ObjectInputStream. (java.io.FileInputStream. file))]
     (l/debug (.readObject inp)) ;version 
-    (let [state (.readObject inp)
+    (let [state (.readObject inp) 
           cache (c/from-stream inp)
           algo  (-> (state :algo-name) ;generate class from serialized map 
                     (algo-from-name)

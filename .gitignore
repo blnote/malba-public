@@ -1,5 +1,6 @@
 #dont upload test data to github
 /test/data
+/cache
 
 # visual code
 /*.vsix

@@ -5,8 +5,9 @@
   "graphical user interface
    initialization via init sets an atom UI containing the GUI interface functions
    which can be called via (gui/invoke function-name)"
-  (:require [clojure.string :as string]
-            [malba.preview]))
+  (:require
+   [clojure.string :as string]
+   [malba.preview]))
 
 (import (com.formdev.flatlaf FlatLightLaf)
         (java.io File)
@@ -14,7 +15,7 @@
         (java.awt Insets BorderLayout GridLayout GridBagLayout GridBagConstraints)
         (java.awt.event KeyEvent InputEvent WindowAdapter ActionListener FocusAdapter FocusEvent ComponentAdapter)
 
-        (javax.swing JCheckBox JButton JFileChooser ButtonGroup JPanel JLabel JRadioButton JTextField JPasswordField JTextField JScrollPane JFrame JToggleButton JTextArea JMenuItem JTabbedPane JProgressBar JMenu JMenuBar UIManager BorderFactory BoxLayout SwingConstants) 
+        (javax.swing JOptionPane JCheckBox JButton JFileChooser ButtonGroup JPanel JLabel JRadioButton JTextField JPasswordField JTextField JScrollPane JFrame JToggleButton JTextArea JMenuItem JTabbedPane JProgressBar JMenu JMenuBar UIManager BorderFactory BoxLayout SwingConstants) 
         (javax.swing SwingUtilities KeyStroke)
         (javax.swing.border CompoundBorder EmptyBorder))
 
@@ -56,7 +57,11 @@
     (event-dispatch "load-network" selected-file)))
 
 (defn- action-btn-cache [event-dispatch]
-  (event-dispatch "clear-cache"))
+  (let [response (JOptionPane/showConfirmDialog
+                  nil "This will clear the session indpendent cache. Proceed?" "Confirm"
+                  JOptionPane/YES_NO_OPTION)]
+    (when (= response JOptionPane/YES_OPTION) 
+      (event-dispatch "clear-cache"))))
 
 (defn- action-btn-connect [event-dispatch]
   (event-dispatch "db-connect"))

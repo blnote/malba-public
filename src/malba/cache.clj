@@ -5,38 +5,29 @@
   "implements two kinds of in-memory-caches: 
    in file-mode the cache consists of two maps cites and cited-by whose keys are publication ids
    and whose values are sets of ids
-   in database-mode a HashMap of SoftReferences is used. Keys are publication ids as well.
-   Values are SoftReferences of sets of ids."
+   in database-mode the LMDB key value store is used."
+  
   (:require [malba.database :as db]
             [malba.file-io :as f]
-            [malba.logger :as l]))
+            [malba.logger :as l]
+            [datalevin.core :as d]))
 
-
-(import java.lang.ref.SoftReference
-        java.util.HashMap)
-;based on internet the setting -XX:SoftRefLRUPolicyMSPerMB=0
-;is needed for the jvm to free all softreferences before 
-; throwing an out of memory error
-
-
-(defn- soft?
-  "true if in soft cache mode (database)"
-  [C]
-  (some? (C :db)))
+(import java.util.HashMap)
 
 (defn sizes
   "calculate cache sizes for logging"
-  [C]
-  (let [soft (soft? C)]
-    (->> (map (fn [mode]
-                (when-let [ca (C mode)]
-                  {mode (if soft (.size ^HashMap ca) (count ca))})) [:cites :cited-by :details])
-         (into {}))))
+  [C] 
+  (->> (map (fn [mode]
+              (when-let [ca (C mode)]
+                {mode (if (some? (C :store)) 
+                        (->  (d/stat (C :store) (name mode)) :entries) 
+                        (count ca))})) [:cites :cited-by :details])
+       (into {})))
 
 (defn- log
   "log cache sizes to UI"
   [C]
-  (let [{:keys [cites cited-by details]} (sizes C)]
+  (let [{:keys [cites cited-by details]} (sizes C)] 
     (if details
       (l/cache (format "(%d/%d/%d)" cites cited-by details))
       (l/cache (format "(%d/%d)" cites cited-by)))))
@@ -45,10 +36,20 @@
   "initialize empty cache with optional database connection"
   [db]
   (doto
-   {:cites (HashMap.)
-    :cited-by (HashMap.)
-    :details (HashMap.)
-    :db db} (log)))
+   (if db 
+     (let [store (d/open-kv "cache")]
+       {:cites (d/open-dbi store "cites")
+        :cited-by (d/open-dbi store "cited-by")
+        :details (d/open-dbi store "details")
+        :store store
+        :db db})
+      
+     {:cites (HashMap.)
+      :cited-by (HashMap.)
+      :details (HashMap.)
+      }) (log)))
+
+
 
 (defn from-file
   "initialize cache from text file"
@@ -60,129 +61,16 @@
                            file
                            (.getName file))} (log))))
 
-(defn- get-soft
-  "returns entry when in soft cache, otherwise nil.
-   deletes entry if soft-reference has been cleared"
-  [^HashMap ca id]
-  (when-let [ref (.get ca id)]
-    (if-let [el (.get ^SoftReference ref)]
-      el
-      (do (.remove ca id) nil))))
-
-(defn- put-soft
-  "write key and value to cache"
-  [^HashMap ca k v]
-  (.put ca k (SoftReference. v)))
-
-(defn- details-to-stream! 
-  [^java.io.ObjectOutputStream out ^HashMap ca]
-(.writeInt out (.size ca))
-(doseq [^java.util.HashMap$Node entry ca]
-  (let [id (.getKey entry)
-        v (.get ^SoftReference (.getValue entry))]
-    (if (nil? v) (.writeObject out nil) 
-        (do
-          (.writeObject out id)
-          (.writeObject out v))))))
-
-(defn- details-from-stream
-  [^java.io.ObjectInputStream in]
-  (let [n (.readInt in)
-        hMap (HashMap.)]
-    (doseq [_ (range n)] (when-let [^String id (.readObject in)]
-                           (put-soft hMap (.intern id) (.readObject in))))
-    hMap))
-
-
-(defn- soft-cache-to-stream!
-  [^java.io.ObjectOutputStream out ^HashMap ca]
-  (.writeInt out (.size ca))
-  (doseq [^java.util.HashMap$Node entry ca]
-    (let [id (.getKey entry)
-          v (.get ^SoftReference (.getValue entry))]
-      (if (nil? v) (.writeObject out nil)
-          (do 
-            (.writeObject out id)
-            (.writeInt out (count v))
-            (doseq [s v] (.writeObject out s)))))))
-
-(defn- soft-cache-from-stream
-  [^java.io.ObjectInputStream in]
-  (let [n (.readInt in)
-        hMap (HashMap.)]
-    (doseq [_ (range n)] (when-let [^String id (.readObject in)]
-                               (.put hMap (.intern id) 
-                                     (SoftReference. 
-                                      (->> (repeatedly (.readInt in) #(.intern ^String (.readObject in)))
-                                           (into #{}))))))
-    hMap))
-
-(defn- cache-to-stream!
-  [^java.io.ObjectOutputStream out ca]
-  (.writeInt out (count ca))
-  (doseq [[k v] ca] 
-    (.writeObject out k)
-    (.writeInt out (count v))
-    (doseq [s v] (.writeObject out s))))
-
-(defn- cache-from-stream
-  [^java.io.ObjectInputStream in]
-  (let [n (.readInt in )] 
-    (loop [m (transient {})
-           i 0]
-      (if (= i n) (persistent! m)
-          (recur (assoc! m (.readObject in)
-                         (->> (repeatedly (.readInt in) #(.readObject in)) 
-                              (into #{}))) (inc i))))))
-
-
-(defn to-stream!
-  "writes cache to stream"
-  [^java.io.ObjectOutputStream out C]
-  (if (soft? C)
-    (doto out
-      (.writeBoolean true)
-      (db/to-stream! (C :db))
-      (soft-cache-to-stream! (C :cites))
-      (soft-cache-to-stream! (C :cited-by))
-      (details-to-stream! (C :details)))
-    (doto out
-      (.writeBoolean false)
-      (.writeObject (C :network-file))
-      (cache-to-stream! (C :cites))
-      (cache-to-stream! (C :cited-by)))))
-
-
-(defn from-stream
-  [^java.io.ObjectInputStream in] 
-  (doto 
-   (if (.readBoolean in)
-     {:db (db/from-stream in) 
-      :cites (soft-cache-from-stream in)
-      :cited-by (soft-cache-from-stream in)
-      :details (details-from-stream in)} 
-     {:network-file (.readObject in)
-      :cites (cache-from-stream in)
-      :cited-by (cache-from-stream in)})
-    (log)
-    ))
-
-
-(defn clean-soft-cache [^HashMap ca]
-  (-> ca (.values) (.removeIf
-                    (reify java.util.function.Predicate
-                      (test [_ arg]
-                        (nil? (.get ^SoftReference arg)))))))
-
-(defn- to-cache
-  "write elements (given as map) to cache"
-  [ca elems]
-  (if (instance? java.util.HashMap ca)
-    (do
-      (doseq [[k v] elems]
-        (.put ^HashMap ca k (SoftReference. v)))
-      (clean-soft-cache ca))
-    (swap! ca merge elems)))
+(comment
+  (def C (let [store (d/open-kv "cache")]
+           {:cites (d/open-dbi store "cites")
+            :cited-by (d/open-dbi store "cited-by")
+            :details (d/open-dbi store "details")
+            :store store}))
+  (clear! C)
+  (sizes C) 
+  (d/clear-dbi (C :store) "cited-by")
+  )
 
 (defn- cache-missing!
   "cache missing keys from database. parameters are db (database config), a set of keys designating the caches to update and a set of ids. "
@@ -194,17 +82,18 @@
           new-entries  (if (= mode :details)
                          (db/fetch-details (C :db) ids)
                          (db/fetch-citations db mode ids))
-          _ (when (> n 100) (l/status (format "Loading %d entries from db done." n)))]
-      (to-cache (C mode) new-entries)
+          _ (when (> n 100) (l/status (format "Loading %d entries from db done." n)))
+          store (C :store)]
+      (d/transact-kv store (name mode) (->> new-entries
+                                         (mapv (fn [[k v]] [:put k v]))))
       (log C)
       new-entries)))
 
-
 (defn look-up-details [C ids]
-  (if-let [ca (C :details)]
+  (if-let [store (C :store)]
     (let [[inside missing]
           (reduce (fn [[inside missing] id]
-                    (if-let [r (get-soft ca id)]
+                    (if-let [r (d/get-value store "details" id)]
                       [(conj! inside [id r]) missing]
                       [inside (conj missing id)])) [(transient {}) ()]  ids)] 
       (into (persistent! inside) (cache-missing! C :details missing)))
@@ -225,10 +114,11 @@
                                 (if-let [r (get ca id)]
                                   (conj! res [id r])
                                   res)) (transient {}) ids)))
-       (let [ca (C mode)
+       (let [store (C :store)
+             table (name mode)
              [inside missing]
              (reduce (fn [[inside missing] id]
-                       (if-let [r (get-soft ca id)]
+                       (if-let [r (d/get-value store table id)]
                          [(conj! inside [id r]) missing]
                          [inside (conj missing id)])) [(transient {}) ()]  ids)] 
          (into (persistent! inside) (cache-missing! C mode missing)))))))
@@ -244,6 +134,55 @@
 
 
 
+(defn clear! [{:keys [store] :as C}]
+  (when store
+    (doseq [dbi ["cites" "cited-by" "details"]]
+      (d/clear-dbi store dbi)))
+  (log C)
+  C)
+
+
+(defn- cache-to-stream!
+  [^java.io.ObjectOutputStream out ca]
+  (.writeInt out (count ca))
+  (doseq [[k v] ca]
+    (.writeObject out k)
+    (.writeInt out (count v))
+    (doseq [s v] (.writeObject out s))))
+
+(defn- cache-from-stream
+  [^java.io.ObjectInputStream in]
+  (let [n (.readInt in)]
+    (loop [m (transient {})
+           i 0]
+      (if (= i n) (persistent! m)
+          (recur (assoc! m (.readObject in)
+                         (->> (repeatedly (.readInt in) #(.readObject in))
+                              (into #{}))) (inc i))))))
+
+(defn to-stream!
+  "writes cache to stream"
+  [^java.io.ObjectOutputStream out C]
+  (if (C :store)
+    (doto out
+      (.writeBoolean true)
+      (db/to-stream! (C :db)))
+    (doto out
+      (.writeBoolean false)
+      (.writeObject (C :network-file))
+      (cache-to-stream! (C :cites))
+      (cache-to-stream! (C :cited-by)))))
+
+
+(defn from-stream
+  [^java.io.ObjectInputStream in]
+  (doto
+   (if (.readBoolean in)
+     (init (db/from-stream in))
+     {:network-file (.readObject in)
+      :cites (cache-from-stream in)
+      :cited-by (cache-from-stream in)})
+    (log)))
 
 
 
