@@ -66,7 +66,7 @@
            {:cites (d/open-dbi store "cites")
             :cited-by (d/open-dbi store "cited-by")
             :details (d/open-dbi store "details")
-            :store store}))
+            :store store})) 
   (clear! C)
   (sizes C) 
   (d/clear-dbi (C :store) "cited-by")
@@ -78,16 +78,14 @@
   (if (or (nil? db) (empty? ids)) ;check for database connection
     {}
     (let [n (count ids)
-          _ (when (> n 100) (l/status (format "Loading %d entries from db..." n)))
+          _ (l/status (format "Loading %d entries from db..." n))
           new-entries  (if (= mode :details)
                          (db/fetch-details (C :db) ids)
                          (db/fetch-citations db mode ids))
-          _ (when (> n 100) (l/status (format "Loading %d entries from db done." n)))
-          store (C :store)]
-      (l/debug "writing to cache...")
+          _ (l/status (format "Loading %d entries from db done." n))
+          store (C :store)] 
       (d/transact-kv store (name mode) (->> new-entries
                                             (mapv (fn [[k v]] [:put k v]))))
-      (l/debug "done.")
       (log C)
       new-entries)))
 
@@ -104,7 +102,7 @@
 (defn look-up
   "returns citation information from cache C for a list of ids. mode can be :cites or :cited-by or empty,
    in which case a list of information of both caches is returned.
-   missing entries are saved to :soft (default) or :hard cache according to save-to parameter.
+   missing entries are fetched from db and saved to cache
    no missing entries are cached in file mode, that is if (nil? (C :db))."
   ([C ids] [(look-up C :cites ids) (look-up C :cited-by ids)])
   ([C mode ids]
@@ -120,7 +118,7 @@
              table (name mode)
              [inside missing]
              (reduce (fn [[inside missing] id]
-                       (if-let [r (d/get-value store table id)]
+                       (if-let [r (d/get-value store table id)] 
                          [(conj! inside [id r]) missing]
                          [inside (conj missing id)])) [(transient {}) ()]  ids)] 
          (into (persistent! inside) (cache-missing! C mode missing)))))))
