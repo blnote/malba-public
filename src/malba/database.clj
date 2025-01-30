@@ -20,6 +20,7 @@
 (defn- prepare-sql [db mode ids]  
   (let [stmt [(db (-> mode name (str "-sql") keyword)) 
               (into-array String ids)]]
+    #_(l/debug (str stmt)) 
     stmt))
 
 (defn- check-connection [ds]
@@ -73,7 +74,7 @@
   "fetch publication info from items table given db configuration
    for keys in details map" 
   [{:keys [ds sql-timeout-in-seconds] :as db} details]
-  (l/debug "fetching main details...")
+  (l/debug "fetching main details...") 
   (with-open [conn
               (jdbc/get-connection ds)] 
     (let [stmt (prepare-sql db :details (keys details)) 
@@ -86,8 +87,8 @@
                                        pubyear (assoc :pubyear (str pubyear))
                                        source_title (assoc :source_title source_title)))) details plan))))
 (defn- fetch-details-authors
-  "fetch author info from authors table given db configuration
-   for keys in details map" 
+  "fetch author info from authors table) given db configuration
+   for keys in details map (only for ids which have been found in items table (previous step))" 
   [{:keys [ds sql-timeout-in-seconds] :as db} details]
   (l/debug "fetching author infos...")
   (with-open [conn
@@ -96,12 +97,12 @@
           rs (jdbc/execute! conn stmt
                             {:builder-fn jdbc-rs/as-unqualified-maps
                              :timeout sql-timeout-in-seconds})]
-      (reduce (fn [res {:keys [item_id auts]}]
+      (reduce (fn [res {:keys [item_id auts]}] 
                 (update res item_id merge (shortened-authors auts))) details rs))))
 
 
 (defn- fetch-details-missing
-  "try to obtain publication details from ref table for ids not found in items table"
+  "try to obtain publication details from ref table for ids not found in items table (not all cited papers are in the database themselves)"
   [{:keys [ds sql-timeout-in-seconds]:as db} details]
   (l/debug "fetching missing publication details...")
   (with-open [conn
@@ -170,8 +171,7 @@
                                         stmt  {:builder-fn jdbc-rs/as-unqualified-maps
                                                :timeout sql-timeout-in-seconds})
                              (process-citation-resultsets mode))))))
-             (apply merge-with set/union C)
-             (doall))))))
+             (apply merge-with set/union C))))))
 
 
 (defn to-stream! [^java.io.ObjectOutputStream out conf]
