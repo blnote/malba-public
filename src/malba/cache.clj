@@ -49,8 +49,6 @@
       :details (HashMap.)
       }) (log)))
 
-
-
 (defn from-file
   "initialize cache from text file"
   [^java.io.File file]
@@ -60,17 +58,6 @@
            :network-file (if (= (class file) java.lang.String)
                            file
                            (.getName file))} (log))))
-
-(comment
-  (def C (let [store (d/open-kv "cache")]
-           {:cites (d/open-dbi store "cites")
-            :cited-by (d/open-dbi store "cited-by")
-            :details (d/open-dbi store "details")
-            :store store})) 
-  (clear! C)
-  (sizes C) 
-  (d/clear-dbi (C :store) "cited-by")
-  )
 
 (defn- cache-missing!
   "cache missing keys from database. parameters are db (database config), a set of keys designating the caches to update and a set of ids. "
@@ -86,52 +73,51 @@
           store (C :store)] 
       (d/transact-kv store (name mode) (->> new-entries
                                             (mapv (fn [[k v]] [:put k v]))))
-      (log C)
-      new-entries)))
+      (log C))))
 
-(defn look-up-details [C ids]
+(defn get-val [C id mode]
   (if-let [store (C :store)]
-    (let [[inside missing]
-          (reduce (fn [[inside missing] id]
-                    (if-let [r (d/get-value store "details" id)]
-                      [(conj! inside [id r]) missing]
-                      [inside (conj missing id)])) [(transient {}) ()]  ids)] 
-      (into (persistent! inside) (cache-missing! C :details missing)))
-    {}))
+    (d/get-value store (name mode) id)
+    (get (C mode) id)))
 
-(defn look-up
-  "returns citation information from cache C for a list of ids. mode can be :cites or :cited-by or empty,
-   in which case a list of information of both caches is returned.
+(defn get-seq [C mode ids]
+  (if-let [store (C :store)]
+    (map (fn [id] [id (d/get-value store (name mode) id)]) ids)
+    (map (fn [id] [id (get (C mode) id)]) ids)))
+
+
+(defn cache!
+  "caches citation information for a list of ids (only the ones missing in cache). mode can be :details :cites or :cited-by
    missing entries are fetched from db and saved to cache
-   no missing entries are cached in file mode, that is if (nil? (C :db))."
-  ([C ids] [(look-up C :cites ids) (look-up C :cited-by ids)])
+   no missing entries are cached in file mode, that is if (nil? (C :db)).
+   returns a lazy seq of pairs [id cache-value] for ids" 
   ([C mode ids]
    (if (empty? ids)
      {}
-     (if-not (C :db)
-       (let [ca (C mode)]
-         (persistent! (reduce (fn [res id]
-                                (if-let [r (get ca id)]
-                                  (conj! res [id r])
-                                  res)) (transient {}) ids)))
-       (let [store (C :store)
-             table (name mode)
-             [inside missing]
-             (reduce (fn [[inside missing] id]
-                       (if-let [r (d/get-value store table id)] 
-                         [(conj! inside [id r]) missing]
-                         [inside (conj missing id)])) [(transient {}) ()]  ids)] 
-         (into (persistent! inside) (cache-missing! C mode missing)))))))
+     (when-let [store (C :store)] ;cache only in db mode
+       (->> ids 
+            (remove #(d/get-value store (name mode) %))   
+            (cache-missing! C mode))))))
+
+(defn look-up
+  ([C mode ids]
+   (cache! C mode ids)
+   (get-seq C mode ids)))
+
+
 
 (defn known-ids
   "caches ids and returns those, for which at least one cache has a non-empty entry."
-  [C ids]
-  (let [cites (look-up C :cites ids)
-        cited-by (look-up C :cited-by ids)]
-    (->> ids
-         (remove #(and (empty? (cites %))
-                       (empty? (cited-by %)))))))
-
+  [C ids] 
+  (let [cites (->> (look-up C :cites ids)
+                   (remove #(empty? (second %)))
+                   (map first)
+                   (into #{}))
+        cited-by (->> (look-up C :cited-by ids)
+                      (remove #(empty? (second %)))
+                      (map first)
+                      (into #{}))] 
+    (->> (concat cites cited-by) distinct)))
 
 
 (defn clear! [{:keys [store] :as C}]

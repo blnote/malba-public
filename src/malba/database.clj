@@ -138,8 +138,7 @@
              (add-detail-labels)))))
 
 
-(defn- process-citation-resultsets [plan mode]
-  (l/debug "processing results...") 
+(defn- process-citation-resultsets [plan mode] 
   (reduce (fn [res {:keys [^String item_id_cited ^String item_id_citing]}]
             (if (and item_id_cited item_id_citing)
               (let [entry (if (= mode :cites)

@@ -6,7 +6,7 @@
   (:require [malba.algorithms.malba-params :as malba-params]
             [malba.algorithms.proto-algo :as proto-algo] 
             [malba.logger :as l]
-            [malba.cache :as c :refer [look-up]]
+            [malba.cache :as c :refer [cache! look-up]]
             [malba.algorithms.proto-algo-params :as params]))
 
 (defn- terminated? [state]
@@ -19,10 +19,10 @@
   @(get state :interrupted))
 
 
-(defn-  remove-from-map
-  "remove multiple elements from map"
-  [m elems]
-  (apply dissoc m (seq elems)))
+(defn-  remove-from-set
+  "remove multiple elements from set"
+  [s elems]
+  (apply disj s elems))
 
 (defn- count-elems-in-map
   "count number of elements that are contained in map m." 
@@ -31,7 +31,7 @@
              (if (m el) (inc res) res)) (long 0) elements)))
 
 (defn- filter-parents
-  "Given a map containg children and its set of parents, 
+  "Given a seq containg children and its set of parents, 
    removes children with too many parents (max-shared), concats all parents, 
    removes duplicates and nodes already in subgraph"
   [max-shared subgraph data]
@@ -57,25 +57,26 @@
               (try (let [{:keys [dc-in bc dc-out min-refs 
                                  max-parents-of-shared-refs]} params 
                          children-mult (->> (look-up C :cites ids)
-                                            vals
+                                            (map second)
                                             (apply concat))
                          citing-sub-new (when dc-in
                                           (->> (look-up C :cited-by ids)
-                                               (filter-parents max-parents-of-shared-refs new-subgraph)
-                                               (look-up C :cites)))
+                                               (filter-parents max-parents-of-shared-refs new-subgraph)))
+                         _ (when dc-in (cache! C :cites citing-sub-new))
                          citing-common-new (when bc
                                              (->>  (look-up C :cited-by (distinct children-mult))
                                                    (filter-parents max-parents-of-shared-refs new-subgraph)
                                                    (look-up C :cites)
-                                                   (filter (fn [[_ ci]] (>= (count ci) min-refs)))))]
+                                                   (filter (fn [[_ ci]] (>= (count ci) min-refs)))
+                                                   (map first)))]
                      (cond-> state
                        true (assoc :subgraph new-subgraph)
                        true (update :added + (count ids)) 
                        dc-out (update :cited-by-sub #(merge-with + % (frequencies children-mult)))
                        bc (update :citing-common into citing-common-new)
-                       bc (update :citing-common remove-from-map ids)
+                       bc (update :citing-common remove-from-set ids)
                        dc-in (update :citing-sub into citing-sub-new)
-                       dc-in (update :citing-sub remove-from-map ids)))
+                       dc-in (update :citing-sub remove-from-set ids)))
                    (catch IllegalArgumentException _
                      (assoc state :error :sql-query-too-large)))))))))
 
@@ -93,10 +94,10 @@
 (defn- step-dc-in
   "DCin step of algorithm. add all elements of  citingSub  to subgraph, 
      whose fraction of references fullfills criteria"
-  [{:keys [citing-sub subgraph params error] :as state}]
+  [{:keys [C citing-sub subgraph params error] :as state}]
   (if (or error (nil? (get params :dc-in))) state
       (let [dc-in (get params :dc-in)]
-        (->> citing-sub
+        (->> (c/get-seq C :cites citing-sub)
              (filter (fn [[_ cites]]
                        (let [ci (count-elems-in-map subgraph cites)]
                          (and
@@ -108,10 +109,10 @@
 (defn- step-bc
   "BC step of algorithm. check each element in citing-common whether it fullfills requirement 
    concerning shared references, add to subgraph if true."
-  [{:keys [citing-common cited-by-sub params error] :as state}]
+  [{:keys [citing-common cited-by-sub params error C] :as state}]
   (if (or error (nil? (get params :bc))) state
       (let [bc (get params :bc)]
-        (->> citing-common
+        (->> (c/get-seq C :cites citing-common)
              (filter (fn [[_ cites]]
                        (>= (/ (count-elems-in-map cited-by-sub cites) (count cites)) bc)))
              (map first)
@@ -125,9 +126,9 @@
    (let [state {:C C
                 :params params
                 :valid-seeds seed ;seeds found in database/file
-                :cited-by-sub {} ;map id -> number of times cited for all papers cited by subgraph
-                :citing-sub {} ;map id -> citations for all DCin candidates
-                :citing-common {} ;map id -> citations for all BC candidates
+                :cited-by-sub {} ;map id->n where n is number of times subgraph cites the publication
+                :citing-sub #{} ; ids of all  DCin candidates
+                :citing-common #{} ;ids of all BC candidates
                 :subgraph {} ;map id -> step (step in which element has been added to subgraph) 
                 :steps 0 ;(number of steps done overall (of three steps)) 
                 :added 0 ;elements added during cycle. used to test if algorithm terminated
@@ -213,7 +214,7 @@
      :interrupted @(get state :interrupted)}))
 
 
-(defn generate-surrounding [{:keys [cited-by-sub citing-sub subgraph citing-common params steps]}]
+(defn generate-surrounding [{:keys [cited-by-sub citing-sub subgraph citing-common params steps C]}]
   (let [{:keys [dc-out dc-in bc surrounding]} params
         add-dc-out (when dc-out
                      (let [ths (- dc-out (surrounding :dc-out))]
@@ -222,13 +223,13 @@
                             (map first))))
         add-bc (when bc
                  (let [ths (- bc (surrounding :bc))]
-                   (->> citing-common
+                   (->> (c/get-seq C :cites citing-common)
                         (filter (fn [[_ cites]]
                                   (>= (/ (count-elems-in-map cited-by-sub cites) (count cites)) ths)))
                         (map first))))
         add-dc-in (when dc-in
                     (let [ths (- dc-in (surrounding :dc-in))]
-                      (->> citing-sub
+                      (->> (c/get-seq C :cites citing-sub)
                            (filter (fn [[_ cites]]
                                      (let [ci (count-elems-in-map subgraph cites)]
                                        (and
@@ -270,16 +271,12 @@
   (to-stream! [this out]
              (let [serialized (into {} (-> this 
                                            (dissoc :C) 
-                                           (dissoc :interrupted) 
-                                           (update :citing-common keys)
-                                           (update :citing-sub keys)
+                                           (dissoc :interrupted)
                                            (update :params #(into {} %))))]
                (.writeObject  ^java.io.ObjectOutputStream out serialized)))
   (from-stream [this in cache]
                (-> (merge this (.readObject ^java.io.ObjectInputStream in) {:C cache
                                                  :interrupted (atom false)
                                                  :error false})
-                   (update :params #(params/update-vars (malba-params/->Params) %)) 
-                   (update :citing-common #(->> (c/look-up cache :cites %)))
-                   (update :citing-sub #(->> (c/look-up cache :cites %))))))
+                   (update :params #(params/update-vars (malba-params/->Params) %)))))
 

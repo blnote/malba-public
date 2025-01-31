@@ -92,8 +92,8 @@
   (let [subgraph-ids (into #{} (keys subgraph))
         surrounding-ids (into #{} (keys surrounding))
         all (set/union subgraph-ids surrounding-ids)
-        details (c/look-up-details cache all)
-        cites (c/look-up cache :cites all)]
+        details (into {} (c/look-up cache :details all))
+        cites (into {} (c/look-up cache :cites all))]
     (->> all
          (map (fn [id]
                 (let [in-sur (contains? surrounding id)]
