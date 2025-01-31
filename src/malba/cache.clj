@@ -63,14 +63,12 @@
   "cache missing keys from database. parameters are db (database config), a set of keys designating the caches to update and a set of ids. "
   [{:keys [db] :as C} mode ids]
   (if (or (nil? db) (empty? ids)) ;check for database connection
-    {}
-    (let [n (count ids)
-          _ (l/status (format "Loading %d entries from db..." n))
-          new-entries  (if (= mode :details)
-                         (db/fetch-details (C :db) ids)
+    {} 
+    (let [new-entries  (if (= mode :details)
+                         (db/fetch-details db ids)
                          (db/fetch-citations db mode ids))
-          _ (l/status (format "Loading %d entries from db done." n))
           store (C :store)] 
+      (l/status "")
       (d/transact-kv store (name mode) (->> new-entries
                                             (mapv (fn [[k v]] [:put k v]))))
       (log C))))
@@ -96,7 +94,8 @@
      {}
      (when-let [store (C :store)] ;cache only in db mode
        (->> ids 
-            (remove #(d/get-value store (name mode) %))   
+            (remove #(d/get-value store (name mode) %))
+            (into [])   
             (cache-missing! C mode))))))
 
 (defn look-up

@@ -142,8 +142,8 @@
   (reduce (fn [res {:keys [^String item_id_cited ^String item_id_citing]}]
             (if (and item_id_cited item_id_citing)
               (let [entry (if (= mode :cites)
-                            {(.intern item_id_citing) #{(.intern item_id_cited)}}
-                            {(.intern item_id_cited) #{(.intern item_id_citing)}})]
+                            { item_id_citing #{ item_id_cited}}
+                            { item_id_cited #{ item_id_citing}})]
                 (merge-with set/union res entry))
               res))
           {} plan))
@@ -152,8 +152,7 @@
   "get map of citation data for a set of ids from database using prepared statements. mode can either be :cites or :cited-by. throws IllegalArgumentException whenever size of ids > max-query-size."
   [{:keys [ds sql-timeout-in-seconds] :as db} mode ids] 
   (let [{:keys [max-query-size max-batch-size]} (connect db)
-        n (count ids)]
-    (l/debug "fetching citations") 
+        n (count ids)] 
     (cond 
       (= n 0) {} ;nothing to do
       (> n max-query-size)
@@ -161,6 +160,7 @@
       :else 
       (let [;;add every id as key to avoid repeated lookups  
             C (into {} (map (fn [id] [id #{}])) ids)]
+        (l/status (format "Loading %d entries from db..." n))
         (->> (partition-all (or max-batch-size 1000) ids)
              (pmap (fn [ids]
                      (let [stmt (prepare-sql db mode ids)]
